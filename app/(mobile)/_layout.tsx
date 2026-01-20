@@ -1,3 +1,4 @@
+import { useAuth } from '@/context/AuthContext';
 import { useTheme } from '@/context/ThemeContext';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import AntDesign from '@expo/vector-icons/AntDesign';
@@ -21,6 +22,7 @@ import {
 } from 'react-native';
 
 export default function MobileLayout() {
+    const {user, logout} = useAuth();
     const {colors, theme} = useTheme();
     const [isMenuOpen, setIsMenuOpen] = useState(false);
     const slideAnim = useRef(new Animated.Value(-300)).current;
@@ -161,14 +163,23 @@ export default function MobileLayout() {
                     {/* User Profile */}
                     <View style={styles.userSection}>
                         <Image
-                            source={{ uri: 'https://via.placeholder.com/80' }}
-                            style={styles.profileImage}
+                        source={
+                            user?.photoURL
+                            ? { uri: user.photoURL }
+                            : require("@/assets/images/default_profile_pic.png")
+                        }
+                        style={styles.profileImage}
+                        resizeMode="cover"
                         />
                         <View style={styles.userInfo}>
-                            <Text style={styles.userName}>This User</Text>
-                            <Text style={styles.userEmail} ellipsizeMode='tail'>username@domain.com</Text>
+                            <Text style={styles.userName} numberOfLines={1}>
+                                {user?.name || 'user'}
+                            </Text>
+                            <Text style={styles.userEmail} ellipsizeMode='tail' numberOfLines={1}>
+                                {user?.email || 'email'}
+                            </Text>
                         </View>
-                        <TouchableOpacity style={styles.exitButton} >
+                        <TouchableOpacity style={styles.exitButton} onPress={logout}>
                             <Ionicons name="exit-outline" style={styles.icon} />
                         </TouchableOpacity>
 
@@ -234,7 +245,7 @@ const createStyles = (colors: any) => StyleSheet.create({
         overflow: 'hidden',
     },
     icon: {
-        fontSize: 30,
+        fontSize: 25,
         color: colors.defaultColor,
     },
     exitButton: {

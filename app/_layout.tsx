@@ -1,12 +1,12 @@
 import FontAwesome from '@expo/vector-icons/FontAwesome';
 import { useFonts } from 'expo-font';
-import { Redirect, Stack } from 'expo-router';
+import { router, Stack, useRootNavigationState, useSegments } from 'expo-router';
 import * as SplashScreen from 'expo-splash-screen';
 import { useEffect } from 'react';
 import { Platform } from 'react-native';
 import 'react-native-reanimated';
 
-import { useColorScheme } from '@/components/useColorScheme';
+import { AuthProvider, useAuth } from '@/context/AuthContext';
 import { ThemeProvider } from '@/context/ThemeContext';
 
 export { ErrorBoundary } from 'expo-router';
@@ -31,24 +31,55 @@ export default function RootLayout() {
 
   if (!loaded) return null;
 
-  return <RootLayoutNav />;
+  return (
+    <ThemeProvider>
+      <AuthProvider>
+        <RootLayoutNav />
+      </AuthProvider>
+    </ThemeProvider>
+  );
 }
 
 function RootLayoutNav() {
-  const colorScheme = useColorScheme();
+  const { user, loading } = useAuth();
+  const segments = useSegments();
+  const navigationState = useRootNavigationState();
+  const isWeb = Platform.OS === 'web';
+
+  useEffect(() => {
+    if (loading || !navigationState?.key) return;
+
+    const inAuthGroup = isWeb 
+      ? segments[0] === '(auth-web)' 
+      : segments[0] === '(auth-mobile)';
+    
+    const authRedirectPath = isWeb ? '/(auth-web)/login' : '/(auth-mobile)/login';
+    const appRedirectPath = isWeb ? '/(web)' : '/(mobile)';
+    
+    if (!user && !inAuthGroup) {
+      router.replace(authRedirectPath);
+    } else if (user && inAuthGroup) {
+      router.replace(appRedirectPath);
+    }
+  }, [user, loading, segments, navigationState?.key, isWeb]);
 
   return (
-    <ThemeProvider>
-      {/* Redirect */}
-      {Platform.OS === 'web' ? (
-        <Redirect href="/(mobile)" />
+    <Stack screenOptions={{ headerShown: false }}>
+      {isWeb ? (
+        <>
+          <Stack.Screen name="(auth-web)" />
+          <Stack.Screen name="(web)" />
+        </>
       ) : (
-        <Redirect href="/(mobile)" />
+        <>
+          <Stack.Screen name="(auth-mobile)" />
+          <Stack.Screen name="(mobile)" />
+        </>
       )}
-
-      {/* Navigation container */}
-      <Stack screenOptions={{ headerShown: false }} />
-    </ThemeProvider>
-
+      <Stack.Screen
+        name="modal"
+        options={{ presentation: "modal", headerShown: true }}
+      />
+    </Stack>
   );
 }
