@@ -5,7 +5,7 @@ import AntDesign from '@expo/vector-icons/AntDesign';
 import EvilIcons from '@expo/vector-icons/EvilIcons';
 import Feather from '@expo/vector-icons/Feather';
 import Ionicons from '@expo/vector-icons/Ionicons';
-import { Tabs } from 'expo-router';
+import { Stack } from 'expo-router'; // Change from Tabs to Stack
 import { useRef, useState } from 'react';
 import {
     Animated,
@@ -23,7 +23,7 @@ import {
 
 export default function MobileLayout() {
     const {user, logout} = useAuth();
-    const {colors, theme} = useTheme();
+    const {colors} = useTheme();
     const [isMenuOpen, setIsMenuOpen] = useState(false);
     const slideAnim = useRef(new Animated.Value(-300)).current;
     const fadeAnim = useRef(new Animated.Value(0)).current;
@@ -86,8 +86,7 @@ export default function MobileLayout() {
 
     return (
         <>
-            <Tabs screenOptions={{
-                tabBarStyle: {display: 'none'},
+            <Stack screenOptions={{
                 headerShown: true, 
                 headerStyle: styles.headerTitleContainer,
                 headerShadowVisible: false,
@@ -134,7 +133,9 @@ export default function MobileLayout() {
                         </View>
                     </View>
                 ),
-            }} />
+            }}>
+                <Stack.Screen name="index" options={{ title: "Home" }} />
+            </Stack>
 
             {/* Overlay */}
             {isMenuOpen && (
@@ -182,7 +183,6 @@ export default function MobileLayout() {
                         <TouchableOpacity style={styles.exitButton} onPress={logout}>
                             <Ionicons name="exit-outline" style={styles.icon} />
                         </TouchableOpacity>
-
                     </View>
 
                     {/* Menu Items */}
