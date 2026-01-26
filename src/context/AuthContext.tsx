@@ -21,6 +21,7 @@ export type Auth0Profile = {
   nickname?: string;
   locale?: string;
   updated_at?: string;
+
 };
 
 export type AppUser = {
@@ -28,6 +29,9 @@ export type AppUser = {
   name: string | null;
   email: string | null;
   photoURL: string | null;
+  userType: 'client' | 'restaurant' | 'admin';
+  setupCompleted?: boolean;
+  restaurantName?: string;
 };
 
 type StoredTokens = {
@@ -40,7 +44,7 @@ type StoredTokens = {
 
 type AuthContextType = {
   user: AppUser | null;
-  login: () => Promise<void>;
+  login: (source?: 'web' | 'mobile') => Promise<void>;
   logout: () => Promise<void>;
   loading: boolean;
   error: string | null;
@@ -56,7 +60,7 @@ const discovery = {
 
 const isTokenExpired = (issuedAt: number, expiresIn: number): boolean => {
   const now = Math.floor(Date.now() / 1000);
-  const buffer = 300; // 5 minute buffer
+  const buffer = 300; 
   return now > (issuedAt + expiresIn - buffer);
 };
 
@@ -102,6 +106,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
       const userInfo = await fetchUserInfo(tokenResult.accessToken);
       
+      // Get login source from storage
+      const loginSource = await getItem("loginSource") as 'web' | 'mobile' | null;
+      
+      // Clear the stored source
+      await deleteItem("loginSource");
+      
       const storedTokens: StoredTokens = {
         accessToken: tokenResult.accessToken,
         idToken: tokenResult.idToken!,
@@ -112,14 +122,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
       await saveItem("authTokens", JSON.stringify(storedTokens));
 
-      const appUser: AppUser = {
-        uid: userInfo.sub,
-        name: userInfo.name || userInfo.nickname || null,
-        email: userInfo.email || null,
-        photoURL: userInfo.picture || null,
-      };
-
-      await saveUserIfNotExists(userInfo);
+      // Pass login source to saveUserIfNotExists
+      const appUser = await saveUserIfNotExists(userInfo, loginSource || undefined);
       setUser(appUser);
       setError(null);
 
@@ -166,7 +170,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     restoreSession();
   }, []);
 
-  const login = async () => {
+  const login = async (source?: 'web' | 'mobile') => {
     if (!request) {
       setError("Auth request not ready");
       return;
@@ -175,11 +179,17 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     try {
       setError(null);
       await promptAsync();
+      
+      // Store the login source temporarily
+      if (source) {
+        await saveItem("loginSource", source);
+      }
     } catch (error) {
       console.error("Login error:", error);
       setError("Failed to start login process");
     }
   };
+
 
   const logout = async () => {
     try {

@@ -10,6 +10,11 @@ export default function LoginScreen() {
   function handleRegisterRestaurant (){
     console.log('redirect to restaurant login');
   }
+
+  const handleLogin = async() => {
+    await login('mobile');
+  }
+
   return (
     <View style={styles.background}>
       <View style={styles.imagotypeContainer}>
@@ -20,6 +25,7 @@ export default function LoginScreen() {
         />
       </View>
 
+      {/* login button */}
       <Pressable 
         style={({hovered, pressed}) => [
 
@@ -27,7 +33,7 @@ export default function LoginScreen() {
           hovered && styles.loginButtonHovered
           
         ]} 
-        onPress={login}>
+        onPress={handleLogin}>
         <Image
           source={require("@/assets/images/auth0_logo.png")}
           style={styles.icon}
