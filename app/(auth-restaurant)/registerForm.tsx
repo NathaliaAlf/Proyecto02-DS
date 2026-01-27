@@ -69,7 +69,7 @@ export default function LoginScreen() {
     
     // Pass data as navigation parameters
     router.push({
-      pathname: "/(auth-web)/profile-pictures",
+      pathname: "/(auth-restaurant)/profile-pictures",
       params: { 
         restaurantData: JSON.stringify(formData)
       }

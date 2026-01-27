@@ -1,18 +1,36 @@
 import { useAuth } from "@/context/AuthContext";
 import { useTheme } from "@/context/ThemeContext";
+import { useRef } from "react";
 import { Image, Pressable, StyleSheet, Text, TouchableOpacity, View } from "react-native";
 
 export default function LoginScreen() {
-  const {login} = useAuth();
-  const {colors} = useTheme();
+  const { login, isLoggingIn } = useAuth();
+  const { colors } = useTheme();
   const styles = createStyles(colors);
+  const loginInProgress = useRef(false);
 
-  function handleRegisterRestaurant (){
+  function handleRegisterRestaurant() {
     console.log('redirect to restaurant login');
   }
 
-  const handleLogin = async() => {
-    await login('mobile');
+  const handleLogin = async () => {
+    // Prevent multiple clicks
+    if (isLoggingIn || loginInProgress.current) {
+      console.log('Login already in progress');
+      return;
+    }
+    
+    try {
+      loginInProgress.current = true;
+      await login('mobile');
+    } catch (error) {
+      console.error('Login error:', error);
+    } finally {
+      // Small delay before allowing another login attempt
+      setTimeout(() => {
+        loginInProgress.current = false;
+      }, 1000);
+    }
   }
 
   return (
@@ -28,18 +46,20 @@ export default function LoginScreen() {
       {/* login button */}
       <Pressable 
         style={({hovered, pressed}) => [
-
           styles.loginButton,
-          hovered && styles.loginButtonHovered
-          
+          (hovered || pressed) && styles.loginButtonHovered,
+          (isLoggingIn || loginInProgress.current) && styles.loginButtonDisabled
         ]} 
-        onPress={handleLogin}>
+        onPress={handleLogin}
+        disabled={isLoggingIn || loginInProgress.current}>
         <Image
           source={require("@/assets/images/auth0_logo.png")}
           style={styles.icon}
           resizeMode="contain"
         />
-        <Text style={styles.bold}>Login with Auth0</Text>
+        <Text style={styles.bold}>
+          {(isLoggingIn || loginInProgress.current) ? 'Opening login...' : 'Login with Auth0'}
+        </Text>
       </Pressable>
 
       <View style={styles.separator}></View>
@@ -51,11 +71,8 @@ export default function LoginScreen() {
         </Text>
       </TouchableOpacity>
     </View>
-
   );
 }
-
-
 
 const createStyles = (colors:any) => StyleSheet.create({
   background: {
@@ -82,7 +99,7 @@ const createStyles = (colors:any) => StyleSheet.create({
     backgroundColor: "rgba(0,0,0,0.35)",
   },
   bold: {
-    fontWeight: 800,
+    fontWeight: "800", // Changed from 800 to "800" for React Native
     color: colors.auth0Text,
   },
   loginButton: {
@@ -96,11 +113,9 @@ const createStyles = (colors:any) => StyleSheet.create({
   },
   loginButtonHovered:{
     backgroundColor: colors.tint,
-    height: 50,
-    flexDirection: "row",
-    paddingHorizontal: 16,
-    justifyContent: "center",
-    alignItems: "center",
+  },
+  loginButtonDisabled: {
+    opacity: 0.6,
   },
   icon: {
     width: 24,

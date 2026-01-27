@@ -1,4 +1,4 @@
-// app/(auth-web)/profile-pictures.tsx
+// app/(auth-restaurant)/profile-pictures.tsx
 import { useAuth } from "@/context/AuthContext";
 import { useTheme } from "@/context/ThemeContext";
 import { FontAwesome, Ionicons } from "@expo/vector-icons";
@@ -60,14 +60,14 @@ export default function ProfilePicturesScreen() {
           console.log('No restaurant data in params');
           if (!hasRedirectedRef.current) {
             hasRedirectedRef.current = true;
-            router.replace('/(auth-web)/registerForm');
+            router.replace('/(auth-restaurant)/registerForm');
           }
         }
       } catch (error) {
         console.error('Error parsing restaurant data:', error);
         if (!hasRedirectedRef.current) {
           hasRedirectedRef.current = true;
-          router.replace('/(auth-web)/registerForm');
+          router.replace('/(auth-restaurant)/registerForm');
         }
       } finally {
         setParsingData(false);
@@ -220,7 +220,7 @@ export default function ProfilePicturesScreen() {
       
       // CRITICAL: Use setTimeout to ensure state updates complete before navigation
       setTimeout(() => {
-        router.replace("/(web)");
+        router.replace("/(restaurant)");
       }, 100);
       
     } catch (error) {
