@@ -50,19 +50,17 @@ function RootLayoutNav() {
 
   useEffect(() => {
     const checkNavigation = async () => {
-      // Wait for navigation to be ready and auth to load
       if (loading || !navigationState?.key) {
         return;
       }
 
-      // Prevent multiple checks
       if (hasChecked) {
         return;
       }
 
       console.log('Navigation check:', {
         hasUser: !!user?.uid,
-        userUid: user?.uid,
+        userType: user?.userType,
         currentPath: segments.join('/'),
         isWeb: isWeb,
         inAuthGroup: isWeb ? segments[0] === '(auth-restaurant)' : segments[0] === '(auth-customer)'
@@ -94,123 +92,105 @@ function RootLayoutNav() {
         return;
       }
 
-      // User exists, check user type and setup status
+      // User exists, check user type and platform compatibility
       setIsCheckingSetup(true);
       
       try {
-        // Import Firebase
-        const { getApps } = await import('firebase/app');
-        
-        if (getApps().length > 0) {
-          const { doc, getDoc } = await import('firebase/firestore');
-          const { getFirestore } = await import('firebase/firestore');
-          const { getApp } = await import('firebase/app');
-          
-          const app = getApp();
-          const db = getFirestore(app);
-          
-          const userDocRef = doc(db, 'users', user.uid);
-          const userDoc = await getDoc(userDocRef);
-          
-          if (userDoc.exists()) {
-            const userData = userDoc.data();
-            const userType = userData?.userType || 'client';
-            
-            console.log('User data found:', {
-              userType: userType,
-              setupCompleted: userData?.setupCompleted
-            });
+        console.log('User exists:', {
+          userType: user.userType,
+          isWeb: isWeb,
+          restaurantId: user.restaurantId
+        });
 
-            if (userType === 'restaurant') {
-              // Restaurant
-              if (!isWeb) {
-                console.log('Restaurant user on mobile, staying on mobile for now');
-                // redirect to mobile app
-                if (inAuthGroup) {
-                  router.replace(mobileAppPath);
-                }
-                return;
-              }
-              
-              // Web restaurant user flow
-              const isSetupComplete = userData?.setupCompleted === true;
-              
-              if (isSetupComplete) {
-                // go to restaurant app (restaurant)
-                if (inAuthGroup) {
-                  console.log('Restaurant setup complete, going to web app');
-                  router.replace(webAppPath);
-                }
-              } else {
-                // Setup incomplete
-                const currentScreen = segments[1];
-                
-                if (!userData?.restaurantName) {
-                  // Need restaurant info
-                  if (currentScreen !== 'registerForm') {
-                    console.log('Going to registerForm');
-                    router.replace('/(auth-restaurant)/registerForm');
-                  }
-                } else if (!userData?.profileImage) {
-                  // Need profile pictures
-                  if (currentScreen !== 'profile-pictures') {
-                    console.log('Going to profile-pictures');
-                    router.replace('/(auth-restaurant)/profile-pictures');
-                  }
-                }
-              }
-              
-            } else {
-              // Cient
-              console.log('Client user detected');
-              
-              // Client users go to mobile app
-              if (isWeb) {
-                console.log('Client user on web, redirecting to mobile');
-                // For web, redirect to mobile login or show message
-                if (inAuthGroup) {
-                  router.replace(mobileAppPath);
-                }
-              } else {
-                // Mobile client user
-                if (inAuthGroup) {
-                  console.log('Mobile client user, going to mobile app');
-                  router.replace(mobileAppPath);
-                }
-              }
-            }
-            
-          } else {
-            // User doesn't exist in Firestore yet
-            console.log('User not in Firestore, creating default');
-            
-            // Default behavior based on platform
-            if (isWeb) {
-              // Web users
-              if (inAuthGroup) {
-                router.replace('/(auth-restaurant)/registerForm');
-              }
-            } else {
-              // Mobile users
-              if (inAuthGroup) {
-                console.log('New mobile user, going to mobile app');
-                router.replace(mobileAppPath);
-              }
-            }
+        // Check platform-user type compatibility
+        if (isWeb && user.userType === 'customer') {
+          // Customer user on web - redirect to mobile
+          console.log('Customer user on web, redirecting to mobile login or showing message');
+          if (inAuthGroup) {
+            // Could show a message or redirect
+            router.replace(mobileLoginPath);
           }
-        } else {
-          // Firebase not initialized - simple redirect
-          console.log('Firebase not initialized, simple redirect');
-          
-          if (isWeb && inAuthGroup) {
-            router.replace(webAppPath);
-          } else if (!isWeb && inAuthGroup) {
+        } else if (!isWeb && user.userType === 'restaurant') {
+          // Restaurant user on mobile - could redirect to web or show message
+          console.log('Restaurant user on mobile, staying for now');
+          // Continue to mobile app for now
+          if (inAuthGroup) {
             router.replace(mobileAppPath);
           }
+        } else {
+          // Platform and user type match or mobile customer
+          
+          if (user.userType === 'restaurant' && isWeb) {
+            // Restaurant user on web - check setup status
+            try {
+              const { restaurantApi } = await import('@/services/api/restaurantApi');
+              const restaurantResult = await restaurantApi.getRestaurantByUid(user.uid);
+              
+              console.log('Layout - Restaurant check result:', {
+                success: restaurantResult.success,
+                data: restaurantResult.data,
+                setupCompleted: restaurantResult.data?.setupCompleted
+              });
+              
+              if (restaurantResult.success && restaurantResult.data) {
+                const restaurant = restaurantResult.data;
+                
+                if (restaurant.setupCompleted) {
+                  // Setup complete
+                  console.log('Layout - Setup complete, going to restaurant app');
+                  if (inAuthGroup) {
+                    router.replace(webAppPath);
+                  }
+                } else {
+                  // Setup incomplete
+                  console.log('Layout - Setup incomplete, checking missing data:', {
+                    hasName: !!restaurant.restaurantName,
+                    hasProfileImage: !!restaurant.profileImage,
+                    hasHeaderImage: !!restaurant.headerImage
+                  });
+                  
+                  if (!restaurant.restaurantName || restaurant.restaurantName === 'My Restaurant') {
+                    // Missing restaurant name
+                    console.log('Layout - Missing restaurant name, staying on registerForm');
+                    // Don't redirect if already on registerForm
+                    if (segments[1] !== 'registerForm' && inAuthGroup) {
+                      router.replace('/(auth-restaurant)/registerForm');
+                    }
+                  } else if (!restaurant.profileImage || !restaurant.headerImage) {
+                    // Missing images
+                    console.log('Layout - Missing images, going to profile-pictures');
+                    if (segments[1] !== 'profile-pictures' && inAuthGroup) {
+                      router.replace('/(auth-restaurant)/profile-pictures');
+                    }
+                  } else {
+                    // Has all data but setup not marked complete
+                    console.log('Layout - Has data but setup not marked, going to registerForm');
+                    if (segments[1] !== 'registerForm' && inAuthGroup) {
+                      router.replace('/(auth-restaurant)/registerForm');
+                    }
+                  }
+                }
+              } else {
+                // No restaurant document found
+                console.log('Layout - No restaurant found, staying on current screen');
+                // Let the login screen handle the redirect
+              }
+            } catch (error) {
+              console.error('Layout - Error checking restaurant:', error);
+            }
+          } else {
+            // Customer user on mobile (or any other valid combo)
+            if (inAuthGroup) {
+              console.log('Going to app');
+              const appPath = isWeb ? webAppPath : mobileAppPath;
+              router.replace(appPath);
+            }
+          }
         }
+        
       } catch (error) {
         console.error('Error in navigation check:', error);
-        // redirect based on platform
+        // Fallback redirect
         if (inAuthGroup) {
           const appPath = isWeb ? webAppPath : mobileAppPath;
           router.replace(appPath);
@@ -248,18 +228,11 @@ function RootLayoutNav() {
       {isWeb ? (
         <>
           <Stack.Screen name="(auth-restaurant)" />
-        </>
-      ) : (
-        <>
-          <Stack.Screen name="(auth-customer)" />
-        </>
-      )}
-      {isWeb ? (
-        <>
           <Stack.Screen name="(restaurant)" />
         </>
       ) : (
         <>
+          <Stack.Screen name="(auth-customer)" />
           <Stack.Screen name="(customer)" />
         </>
       )}

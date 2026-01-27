@@ -170,8 +170,8 @@ export default function MobileLayout() {
                     <View style={styles.userSection}>
                         <Image
                         source={
-                            user?.photoURL
-                            ? { uri: user.photoURL }
+                            user?.picture
+                            ? { uri: user.picture }
                             : require("@/assets/images/default_profile_pic.png")
                         }
                         style={styles.profileImage}
