@@ -5,7 +5,7 @@ import AntDesign from '@expo/vector-icons/AntDesign';
 import EvilIcons from '@expo/vector-icons/EvilIcons';
 import Feather from '@expo/vector-icons/Feather';
 import Ionicons from '@expo/vector-icons/Ionicons';
-import { Stack } from 'expo-router'; // Change from Tabs to Stack
+import { router, Stack } from 'expo-router'; // Change from Tabs to Stack
 import { useRef, useState } from 'react';
 import {
     Animated,
@@ -41,6 +41,11 @@ export default function MobileLayout() {
         { id: 2, icon: 'crown-outline', name: 'Subscriptions', iconLib: MaterialCommunityIcons },
     ];
 
+    const handleLogout = async () => {
+        await logout();
+        router.replace('/(auth-customer)/login');
+    };
+    
     const openMenu = () => {
         setIsMenuOpen(true);
         Animated.parallel([
@@ -180,7 +185,7 @@ export default function MobileLayout() {
                                 {user?.email || 'email'}
                             </Text>
                         </View>
-                        <TouchableOpacity style={styles.exitButton} onPress={logout}>
+                        <TouchableOpacity style={styles.exitButton} onPress={handleLogout}>
                             <Ionicons name="exit-outline" style={styles.icon} />
                         </TouchableOpacity>
                     </View>

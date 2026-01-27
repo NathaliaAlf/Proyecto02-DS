@@ -65,23 +65,29 @@ function RootLayoutNav() {
         userUid: user?.uid,
         currentPath: segments.join('/'),
         isWeb: isWeb,
-        inAuthGroup: isWeb ? segments[0] === '(auth-web)' : segments[0] === '(auth-mobile)'
+        inAuthGroup: isWeb ? segments[0] === '(auth-restaurant)' : segments[0] === '(auth-customer)'
       });
 
       const inAuthGroup = isWeb 
-        ? segments[0] === '(auth-web)' 
-        : segments[0] === '(auth-mobile)';
+        ? segments[0] === '(auth-restaurant)' 
+        : segments[0] === '(auth-customer)';
       
-      const webLoginPath = '/(auth-web)/login';
-      const mobileLoginPath = '/(auth-mobile)/login';
-      const webAppPath = '/(web)';
-      const mobileAppPath = '/(mobile)';
+      const webLoginPath = '/(auth-restaurant)/login';
+      const mobileLoginPath = '/(auth-customer)/login';
+      const webAppPath = '/(restaurant)';
+      const mobileAppPath = '/(customer)';
 
       // No user, go to login
       if (!user) {
         setHasChecked(true);
-        if (!inAuthGroup) {
-          console.log('No user, redirecting to login');
+        const currentGroup = segments[0];
+        const isInAppGroup = isWeb 
+          ? currentGroup === '(restaurant)'
+          : currentGroup === '(customer)';
+        
+        // Redirect if in app group or not in correct auth group
+        if (isInAppGroup || !inAuthGroup) {
+          console.log('No user, redirecting to login from:', currentGroup);
           const loginPath = isWeb ? webLoginPath : mobileLoginPath;
           router.replace(loginPath);
         }
@@ -130,7 +136,7 @@ function RootLayoutNav() {
               const isSetupComplete = userData?.setupCompleted === true;
               
               if (isSetupComplete) {
-                // go to restaurant app (web)
+                // go to restaurant app (restaurant)
                 if (inAuthGroup) {
                   console.log('Restaurant setup complete, going to web app');
                   router.replace(webAppPath);
@@ -143,13 +149,13 @@ function RootLayoutNav() {
                   // Need restaurant info
                   if (currentScreen !== 'registerForm') {
                     console.log('Going to registerForm');
-                    router.replace('/(auth-web)/registerForm');
+                    router.replace('/(auth-restaurant)/registerForm');
                   }
                 } else if (!userData?.profileImage) {
                   // Need profile pictures
                   if (currentScreen !== 'profile-pictures') {
                     console.log('Going to profile-pictures');
-                    router.replace('/(auth-web)/profile-pictures');
+                    router.replace('/(auth-restaurant)/profile-pictures');
                   }
                 }
               }
@@ -182,7 +188,7 @@ function RootLayoutNav() {
             if (isWeb) {
               // Web users
               if (inAuthGroup) {
-                router.replace('/(auth-web)/registerForm');
+                router.replace('/(auth-restaurant)/registerForm');
               }
             } else {
               // Mobile users
@@ -241,22 +247,22 @@ function RootLayoutNav() {
     <Stack screenOptions={{ headerShown: false }}>
       {isWeb ? (
         <>
-          <Stack.Screen name="(auth-web)" />
-          <Stack.Screen name="(web)" />
+          <Stack.Screen name="(auth-restaurant)" />
         </>
       ) : (
         <>
-          <Stack.Screen name="(auth-mobile)" />
-          <Stack.Screen name="(mobile)" />
+          <Stack.Screen name="(auth-customer)" />
         </>
       )}
-      <Stack.Screen
-        name="modal"
-        options={{ 
-          presentation: "modal", 
-          headerShown: true,
-        }}
-      />
+      {isWeb ? (
+        <>
+          <Stack.Screen name="(restaurant)" />
+        </>
+      ) : (
+        <>
+          <Stack.Screen name="(customer)" />
+        </>
+      )}
     </Stack>
   );
 }

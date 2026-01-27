@@ -1,3 +1,4 @@
+// context/AuthContext
 import { saveUserIfNotExists } from "@/services/userService";
 import { deleteItem, getItem, saveItem } from "@/utils/storage";
 import * as AuthSession from "expo-auth-session";
@@ -21,7 +22,6 @@ export type Auth0Profile = {
   nickname?: string;
   locale?: string;
   updated_at?: string;
-
 };
 
 export type AppUser = {
@@ -49,6 +49,7 @@ type AuthContextType = {
   loading: boolean;
   error: string | null;
   clearError: () => void;
+  isLoggingIn: boolean;
 };
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -68,6 +69,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<AppUser | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [isLoggingIn, setIsLoggingIn] = useState(false); // Track login in progress
 
   const redirectUri = AuthSession.makeRedirectUri();
   console.log("REDIRECT URI:", redirectUri);
@@ -133,18 +135,30 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       setUser(null);
     } finally {
       setLoading(false);
+      setIsLoggingIn(false); // Reset login state
     }
   };
 
   useEffect(() => {
-    if (response?.type !== "success" || !request?.codeVerifier) return;
-    exchangeToken(response.params.code, request.codeVerifier);
+    if (response?.type === "success" && request?.codeVerifier) {
+      exchangeToken(response.params.code, request.codeVerifier);
+    } else if (response?.type === "error" || response?.type === "dismiss") {
+      // Handle user cancellation or error
+      setIsLoggingIn(false);
+      setLoading(false);
+      if (response?.type === "error") {
+        setError(response.error?.message || "Login cancelled");
+      }
+    }
   }, [response]);
 
   const restoreSession = async () => {
     try {
       const stored = await getItem("authTokens");
-      if (!stored) return;
+      if (!stored) {
+        setLoading(false);
+        return;
+      }
 
       const tokens: StoredTokens = JSON.parse(stored);
       
@@ -176,27 +190,41 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       return;
     }
     
+    if (isLoggingIn) {
+      console.log("Login already in progress");
+      return;
+    }
+    
     try {
+      setIsLoggingIn(true);
       setError(null);
-      await promptAsync();
       
       // Store the login source temporarily
       if (source) {
         await saveItem("loginSource", source);
       }
+      
+      const result = await promptAsync();
+      
+      // Handle immediate cancellation
+      if (result?.type === "error" || result?.type === "dismiss") {
+        setIsLoggingIn(false);
+        if (result?.type === "error") {
+          setError(result.error?.message || "Login cancelled");
+        }
+      }
     } catch (error) {
       console.error("Login error:", error);
       setError("Failed to start login process");
+      setIsLoggingIn(false);
     }
   };
-
 
   const logout = async () => {
     try {
       setUser(null);
-      
+      setIsLoggingIn(false);
       await deleteItem("authTokens");
-      
       console.log('Logout successful');
     } catch (error) {
       console.error('Logout error:', error);
@@ -221,7 +249,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       login, 
       logout, 
       error,
-      clearError 
+      clearError,
+      isLoggingIn
     }}>
       {children}
     </AuthContext.Provider>

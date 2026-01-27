@@ -26,22 +26,22 @@ export default function LoginScreen() {
           
           if (userData.setupCompleted) {
             // Setup complete → go to web app
-            router.replace('/(web)');
+            router.replace('/(restaurant)');
           } else if (userData.restaurantName && !userData.profileImage) {
             // Has restaurant info but no pictures → profile-pictures
-            router.replace('/(auth-web)/profile-pictures');
+            router.replace('/(auth-restaurant)/profile-pictures');
           } else {
             // No restaurant info → registerForm
-            router.replace('/(auth-web)/registerForm');
+            router.replace('/(auth-restaurant)/registerForm');
           }
         } else {
           // New user → registerForm
-          router.replace('/(auth-web)/registerForm');
+          router.replace('/(auth-restaurant)/registerForm');
         }
       } catch (error) {
         console.error('Error checking user after login:', error);
         // Default to registerForm on error
-        router.replace('/(auth-web)/registerForm');
+        router.replace('/(auth-restaurant)/registerForm');
       }
     };
 
@@ -66,20 +66,20 @@ export default function LoginScreen() {
           // Check if setup is completed
           if (userData.setupCompleted) {
             console.log("User setup completed, redirecting to main app");
-            router.replace("/(web)"); // or /(mobile) depending on platform
+            router.replace("/(restaurant)"); // or /(mobile) depending on platform
           } else {
             console.log("User exists but setup not completed");
-            router.replace("/(auth-web)/registerForm"); // Go to registration
+            router.replace("/(auth-restaurant)/registerForm"); // Go to registration
           }
         } else {
           // User doesn't exist in Firestore, go to registration
           console.log("User not found in Firestore, redirecting to registration");
-          router.replace("/(auth-web)/registerForm");
+          router.replace("/(auth-restaurant)/registerForm");
         }
       } catch (error) {
         console.error("Error checking user status:", error);
         // On error, still send to registration as fallback
-        router.replace("/(auth-web)/registerForm");
+        router.replace("/(auth-restaurant)/registerForm");
       } finally {
         setCheckingUser(false);
       }
