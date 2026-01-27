@@ -1,10 +1,12 @@
 import { StatusBar } from 'expo-status-bar';
-import { Platform, StyleSheet } from 'react-native';
+import { Platform, Pressable, StyleSheet } from 'react-native';
 
 import EditScreenInfo from '@/components/EditScreenInfo';
 import { Text, View } from '@/components/Themed';
+import { useAuth } from '@/context/AuthContext';
 
 export default function ModalScreen() {
+  const { logout } = useAuth();
   return (
     <View style={styles.container}>
       <Text style={styles.title}>Modal</Text>
@@ -13,6 +15,11 @@ export default function ModalScreen() {
 
       {/* Use a light status bar on iOS to account for the black space above the modal */}
       <StatusBar style={Platform.OS === 'ios' ? 'light' : 'auto'} />
+      <Pressable
+      onPress={logout}
+      >
+        <Text>logOut</Text>
+      </Pressable>
     </View>
   );
 }
