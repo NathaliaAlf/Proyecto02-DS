@@ -1,6 +1,7 @@
 // app/(auth-restaurant)/profile-pictures.tsx
 import { useAuth } from "@/context/AuthContext";
 import { useTheme } from "@/context/ThemeContext";
+import { restaurantApi } from "@/services/api/restaurantApi";
 import { FontAwesome, Ionicons } from "@expo/vector-icons";
 import * as ImagePicker from 'expo-image-picker';
 import { router, useLocalSearchParams } from "expo-router";
@@ -40,27 +41,57 @@ export default function ProfilePicturesScreen() {
     ingredients: string[];
   } | null>(null);
   const [parsingData, setParsingData] = useState(true);
+  const [existingRestaurantId, setExistingRestaurantId] = useState<string | null>(null);
   
   // Use ref to prevent redirect loops
   const hasRedirectedRef = useRef(false);
-
 
   // Parse restaurant data from params ONCE on mount
   useEffect(() => {
     // Prevent re-running if we already have data
     if (restaurantData || hasRedirectedRef.current) return;
 
-    const parseRestaurantData = () => {
+    const parseRestaurantData = async () => {
       try {
         if (params.restaurantData) {
           const parsedData = JSON.parse(params.restaurantData as string);
           console.log('Received restaurant data:', parsedData);
           setRestaurantData(parsedData);
         } else {
-          console.log('No restaurant data in params');
-          if (!hasRedirectedRef.current) {
-            hasRedirectedRef.current = true;
-            router.replace('/(auth-restaurant)/registerForm');
+          console.log('No restaurant data in params, checking existing restaurant');
+          
+          // Try to get existing restaurant
+          if (user?.uid) {
+            const result = await restaurantApi.getRestaurantByUid(user.uid);
+            if (result.success && result.data) {
+              const restaurant = result.data;
+              setExistingRestaurantId(restaurant.id);
+              setRestaurantData({
+                restaurantName: restaurant.restaurantName,
+                categories: restaurant.categories || [],
+                ingredients: restaurant.ingredients || []
+              });
+              
+              // Load existing images if available
+              if (restaurant.profileImage) {
+                setProfilePicture(restaurant.profileImage);
+              }
+              if (restaurant.headerImage) {
+                setHeaderPicture(restaurant.headerImage);
+              }
+            } else {
+              // No existing restaurant found
+              if (!hasRedirectedRef.current) {
+                hasRedirectedRef.current = true;
+                router.replace('/(auth-restaurant)/registerForm');
+              }
+            }
+          } else {
+            // No user logged in
+            if (!hasRedirectedRef.current) {
+              hasRedirectedRef.current = true;
+              router.replace('/(auth-restaurant)/registerForm');
+            }
           }
         }
       } catch (error) {
@@ -75,7 +106,7 @@ export default function ProfilePicturesScreen() {
     };
 
     parseRestaurantData();
-  }, [params, restaurantData]); // Add restaurantData to dependencies
+  }, [params, user]);
 
   // Upload to Cloudinary function
   const uploadToCloudinary = async (uri: string, type: 'profile' | 'header') => {
@@ -147,7 +178,7 @@ export default function ProfilePicturesScreen() {
     }
   };
 
-  // Complete setup - save everything to Firestore
+  // Complete setup - save everything to Firestore using API
   const completeSetup = async () => {
     console.log('Starting completeSetup...');
     
@@ -183,45 +214,80 @@ export default function ProfilePicturesScreen() {
       const headerUrl = await uploadToCloudinary(headerPicture, 'header');
       setUploadProgress(80);
 
-      console.log('Saving to Firestore...');
-      // Import Firebase dynamically
-      const { doc, setDoc } = await import('firebase/firestore');
-      const { getApp } = await import('firebase/app');
-      const { getFirestore } = await import('firebase/firestore');
+      console.log('Saving to Firestore via API...');
       
-      const app = getApp();
-      const db = getFirestore(app);
+      // First, try to get the existing restaurant
+      const existingRestaurantResult = await restaurantApi.getRestaurantByUid(user.uid);
       
-      // Save ALL data to Firestore
-      const userDoc = {
-        uid: user.uid,
-        email: user.email,
-        displayName: restaurantData.restaurantName,
+      if (existingRestaurantResult.success && existingRestaurantResult.data) {
+        // UPDATE existing restaurant
+        const restaurantId = existingRestaurantResult.data.id;
+        console.log('Updating existing restaurant:', restaurantId);
         
-        // Images from Cloudinary
-        profileImage: profileUrl,
-        headerImage: headerUrl,
+        const updateResult = await restaurantApi.updateRestaurant(restaurantId, {
+          profileImage: profileUrl,
+          headerImage: headerUrl,
+          setupCompleted: true,
+          lastUpdated: new Date().toISOString()
+        });
         
-        // Restaurant data from registerForm
-        restaurantName: restaurantData.restaurantName,
-        categories: restaurantData.categories,
-        ingredients: restaurantData.ingredients,
+        if (!updateResult.success) {
+          throw new Error(updateResult.error || 'Failed to update restaurant');
+        }
         
-        // Setup completed
-        setupCompleted: true,
-        createdAt: new Date().toISOString(),
-        lastUpdated: new Date().toISOString(),
-      };
+        console.log('Restaurant updated successfully');
+      } else {
+        // CREATE new restaurant (shouldn't happen if they came from registerForm)
+        console.log('No existing restaurant found, creating new one');
+        const createResult = await restaurantApi.createRestaurant({
+          uid: user.uid,
+          restaurantName: restaurantData.restaurantName,
+          displayName: restaurantData.restaurantName,
+          categories: restaurantData.categories,
+          ingredients: restaurantData.ingredients,
+          profileImage: profileUrl,
+          headerImage: headerUrl,
+          setupCompleted: true,
+        });
+        
+        if (!createResult.success) {
+          // If creation fails because restaurant already exists, try to update
+          if (createResult.error?.includes('already exists')) {
+            console.log('Restaurant creation failed because it exists, trying to update instead');
+            
+            // Try to find and update the existing restaurant
+            const findResult = await restaurantApi.getRestaurantByUid(user.uid);
+            if (findResult.success && findResult.data) {
+              const updateResult = await restaurantApi.updateRestaurant(findResult.data.id, {
+                profileImage: profileUrl,
+                headerImage: headerUrl,
+                setupCompleted: true,
+                lastUpdated: new Date().toISOString()
+              });
+              
+              if (!updateResult.success) {
+                throw new Error(updateResult.error || 'Failed to update existing restaurant');
+              }
+            } else {
+              throw new Error('Restaurant exists but could not be found for update');
+            }
+          } else {
+            throw new Error(createResult.error || 'Failed to create restaurant');
+          }
+        }
+        
+        console.log('Restaurant created successfully');
+      }
       
-      await setDoc(doc(db, 'users', user.uid), userDoc, { merge: true });
       setUploadProgress(100);
       
-      console.log('All data saved to Firestore, navigating to /(web)...');
+      console.log('All data saved, navigating to restaurant app...');
       
-      // CRITICAL: Use setTimeout to ensure state updates complete before navigation
+      // Give Firestore a moment to update, then navigate
       setTimeout(() => {
+        // Use replace to ensure we leave the auth flow completely
         router.replace("/(restaurant)");
-      }, 100);
+      }, 1000); // Increased timeout to ensure Firestore updates
       
     } catch (error) {
       console.error("Setup error:", error);
@@ -230,13 +296,10 @@ export default function ProfilePicturesScreen() {
         error instanceof Error ? error.message : "Failed to save. Please try again.",
         [{ text: "OK" }]
       );
-    } finally {
-      // Don't reset loading immediately if we're navigating
-      if (uploadProgress < 100) {
-        setLoading(false);
-        setUploadProgress(0);
-      }
+      setLoading(false);
+      setUploadProgress(0);
     }
+    // Don't reset loading here - let navigation happen first
   };
 
   // Image picker functions

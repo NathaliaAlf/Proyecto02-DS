@@ -1,8 +1,9 @@
-import { db } from "@/config/firebase";
+// app/(auth-restaurant)/login.tsx
 import { useAuth } from "@/context/AuthContext";
 import { useTheme } from "@/context/ThemeContext";
+import { restaurantApi } from "@/services/api/restaurantApi";
+import { userApi } from "@/services/api/userApi";
 import { router } from "expo-router";
-import { doc, getDoc } from "firebase/firestore";
 import { useEffect, useState } from "react";
 import { ActivityIndicator, Image, Pressable, StyleSheet, Text, View } from "react-native";
 
@@ -11,85 +12,80 @@ export default function LoginScreen() {
   const styles = createStyles(colors);
   const { login, user, loading: authLoading } = useAuth();
   const [checkingUser, setCheckingUser] = useState(false);
-  const {loading } = useAuth();
 
   useEffect(() => {
     const checkUserAfterLogin = async () => {
-      if (!user?.uid || loading) return;
+      if (!user?.uid || authLoading) return;
 
+      setCheckingUser(true);
       try {
-        const userDocRef = doc(db, 'users', user.uid);
-        const userDoc = await getDoc(userDocRef);
+        console.log("Checking user after login:", user.uid);
         
-        if (userDoc.exists()) {
-          const userData = userDoc.data();
+        // First, check if we have a user document
+        const userResult = await userApi.getUserByUid(user.uid);
+        
+        if (userResult.success && userResult.data) {
+          const userData = userResult.data;
           
-          if (userData.setupCompleted) {
-            // Setup complete → go to web app
-            router.replace('/(restaurant)');
-          } else if (userData.restaurantName && !userData.profileImage) {
-            // Has restaurant info but no pictures → profile-pictures
-            router.replace('/(auth-restaurant)/profile-pictures');
+          // Check if user is a restaurant (should always be true for web)
+          if (userData.userType !== 'restaurant') {
+            console.error('Web user is not a restaurant type, redirecting to registerForm');
+            router.replace('/(auth-restaurant)/registerForm');
+            return;
+          }
+          
+          // Check if restaurant exists
+          const restaurantResult = await restaurantApi.getRestaurantByUid(user.uid);
+          
+          if (restaurantResult.success && restaurantResult.data) {
+            const restaurantData = restaurantResult.data;
+            console.log("Restaurant found:", restaurantData);
+            
+            if (restaurantData.setupCompleted) {
+              // Setup complete → go to restaurant app
+              console.log("Setup complete, redirecting to restaurant app");
+              router.replace('/(restaurant)');
+            } else {
+              // Restaurant exists but setup incomplete
+              console.log("Setup incomplete, checking what's missing");
+              
+              // Check what step they need to complete
+              if (!restaurantData.setupCompleted) {
+                // Missing restaurant name (or still default) → registerForm
+                console.log("Has data but setup not marked, going to registerForm");
+                router.replace('/(auth-restaurant)/registerForm');
+              }
+            }
           } else {
-            // No restaurant info → registerForm
+            // No restaurant document found → ALWAYS go to registerForm
+            console.log("No restaurant found, going to registerForm");
             router.replace('/(auth-restaurant)/registerForm');
           }
         } else {
-          // New user → registerForm
+          // User doesn't exist in database → registerForm
+          console.log("User not found in database, going to registerForm");
           router.replace('/(auth-restaurant)/registerForm');
         }
       } catch (error) {
         console.error('Error checking user after login:', error);
         // Default to registerForm on error
         router.replace('/(auth-restaurant)/registerForm');
-      }
-    };
-
-    checkUserAfterLogin();
-  }, [user, loading]);
-
-  // Effect to check user status when auth state changes
-  useEffect(() => {
-    const checkUserStatus = async () => {
-      if (!user) return; // No user logged in yet
-      
-      setCheckingUser(true);
-      
-      try {
-        // Check if user document exists in Firestore
-        const userDocRef = doc(db, "users", user.uid);
-        const userDoc = await getDoc(userDocRef);
-        
-        if (userDoc.exists()) {
-          const userData = userDoc.data();
-          
-          // Check if setup is completed
-          if (userData.setupCompleted) {
-            console.log("User setup completed, redirecting to main app");
-            router.replace("/(restaurant)"); // or /(mobile) depending on platform
-          } else {
-            console.log("User exists but setup not completed");
-            router.replace("/(auth-restaurant)/registerForm"); // Go to registration
-          }
-        } else {
-          // User doesn't exist in Firestore, go to registration
-          console.log("User not found in Firestore, redirecting to registration");
-          router.replace("/(auth-restaurant)/registerForm");
-        }
-      } catch (error) {
-        console.error("Error checking user status:", error);
-        // On error, still send to registration as fallback
-        router.replace("/(auth-restaurant)/registerForm");
       } finally {
         setCheckingUser(false);
       }
     };
 
-    checkUserStatus();
-  }, [user]);
+    // Add a small delay to ensure Auth0 callback is complete
+    const timer = setTimeout(() => {
+      checkUserAfterLogin();
+    }, 500);
+
+    return () => clearTimeout(timer);
+  }, [user, authLoading]);
 
   const handleLogin = async () => {
     try {
+      // For web, always login as restaurant
       await login('web');
     } catch (error) {
       console.error("Login error:", error);
