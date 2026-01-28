@@ -11,6 +11,7 @@ import {
     Animated,
     Easing,
     Image,
+    Pressable,
     ScrollView,
     StatusBar,
     StyleSheet,
@@ -110,20 +111,16 @@ export default function MobileLayout() {
                     </View>
                 ),
                 headerLeft: () => (
-                    <View>
-                        <View style={styles.headerLeftContainer}>
-                            <TouchableOpacity
-                                hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
-                                activeOpacity={0.7}
-                                onPress={toggleMenu}
-                            >
-                                <AntDesign 
-                                    name={isMenuOpen ? "close" : "menu"} 
-                                    style={styles.icon}
-                                />
-                            </TouchableOpacity>
-                        </View>
-                    </View>
+                    <Pressable
+                        hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+                        onPress={toggleMenu}
+                        style={styles.headerLeftContainer}
+                    >
+                        <AntDesign 
+                            name={isMenuOpen ? "close" : "menu"} 
+                            style={styles.icon}
+                        />
+                    </Pressable>
                 ),
                 headerRight: () => (
                     <View>
@@ -244,6 +241,7 @@ const createStyles = (colors: any) => StyleSheet.create({
     headerLeftContainer: {
         marginLeft: 20,
         overflow: 'hidden',
+        backgroundColor: 'transparent',
     },
     headerRightContainer: {
         marginRight: 20,
