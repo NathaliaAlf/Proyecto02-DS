@@ -54,14 +54,20 @@ export default function RestaurantsByCategoryScreen() {
     }
   };
 
-  const handleRestaurantPress = (restaurantId: string) => {
-    router.push(`/(customer)/restaurants/${restaurantId}`);
+  const handleRestaurantPress = (restaurantId: string, restaurantName: string) => {
+    router.push({
+      pathname: "/(customer)/restaurant/[restaurantId]",
+      params: { 
+        restaurantId,
+        restaurantName 
+      }
+    });
   };
 
   const renderRestaurantItem = ({ item }: { item: Restaurant }) => (
     <TouchableOpacity 
       style={styles.restaurantCard}
-      onPress={() => handleRestaurantPress(item.id)}
+      onPress={() => handleRestaurantPress(item.id, item.restaurantName)}
     >
       <View style={styles.restaurantInfo}>
         <Text style={styles.restaurantName}>{item.restaurantName}</Text>
