@@ -1,0 +1,134 @@
+// types/menu.ts
+export interface MenuSectionOption {
+  id: string;
+  name: string;
+  additionalCost?: number; // Extra cost for this option
+  ingredients?: string[]; // Ingredients to add/remove if ingredientDependent is true
+}
+
+export interface MenuSection {
+  id: string;
+  name: string;
+  required: boolean; // Whether customer must select an option
+  multiple: boolean; // Whether customer can select multiple options
+  ingredientDependent: boolean; // Whether options affect ingredients
+  options: MenuSectionOption[];
+}
+
+export interface PlateVariant {
+  id: string;
+  variantKey: string; 
+  variantName: string;
+  price: number; // Base price + additional costs from selected options
+  ingredients: string[]; // Final ingredients list for this variant
+  active: boolean; // Whether this variant is available
+}
+
+export interface Plate {
+  id: string;
+  name: string;
+  description: string;
+  basePrice: number;
+  baseIngredients: string[]; // Base ingredients without any modifications
+  imageUrl: string;
+  active: boolean;
+  sections: MenuSection[];
+  variants: PlateVariant[]; // Pre-calculated variants based on sections
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface PlateForCreation {
+  id: string;
+  name: string;
+  description: string;
+  basePrice: number;
+  baseIngredients: string[];
+  imageUrl: string;
+  active: boolean;
+  sections: MenuSectionCreateDTO[]; // DTOs without IDs
+  variants: PlateVariant[];
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface Menu {
+  id: string;
+  restaurantId: string;
+  name: string; 
+  description?: string;
+  active: boolean;
+  plates: Plate[];
+  createdAt: string;
+  updatedAt: string;
+}
+
+// DTOs for creating/updating
+export interface MenuSectionOptionCreateDTO {
+  name: string;
+  additionalCost?: number;
+  ingredients?: string[];
+}
+
+export interface MenuSectionCreateDTO {
+  name: string;
+  required?: boolean;
+  multiple?: boolean;
+  ingredientDependent?: boolean;
+  options: MenuSectionOptionCreateDTO[];
+}
+
+export interface PlateCreateDTO {
+  name: string;
+  description: string;
+  basePrice: number;
+  baseIngredients: string[];
+  imageUrl: string;
+  sections: MenuSectionCreateDTO[];
+}
+
+export interface MenuCreateDTO {
+  restaurantId: string;
+  name: string;
+  description?: string;
+  plates?: PlateCreateDTO[];
+}
+
+export interface MenuUpdateDTO {
+  name?: string;
+  description?: string;
+  active?: boolean;
+}
+
+export interface PlateUpdateDTO {
+  name?: string;
+  description?: string;
+  basePrice?: number;
+  baseIngredients?: string[];
+  imageUrl?: string;
+  active?: boolean;
+  sections?: MenuSectionCreateDTO[];
+}
+
+// For order customization
+export interface SelectedOption {
+  sectionId: string;
+  optionId: string;
+  optionName: string;
+  additionalCost: number;
+}
+
+export interface CustomizedPlate {
+  plateId: string;
+  plateName: string;
+  basePrice: number;
+  selectedOptions: SelectedOption[];
+  finalPrice: number;
+  variantId?: string; // If matching a pre-calculated variant
+  customIngredients?: string[]; // If no matching variant
+}
+
+export interface MenuSectionWithIds extends Omit<MenuSectionCreateDTO, 'options'> {
+  id: string;
+  options: MenuSectionOption[];
+}

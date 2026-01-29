@@ -1,4 +1,4 @@
-// app/(customer)/restaurants/[categoryId].tsx
+// (customer)/restaurants/[categoryId]/index.tsx
 import { useTheme } from '@/context/ThemeContext';
 import { restaurantApi } from '@/services/api/restaurantApi';
 import { Restaurant } from '@/types/restaurant';
@@ -54,14 +54,22 @@ export default function RestaurantsByCategoryScreen() {
     }
   };
 
-  const handleRestaurantPress = (restaurantId: string) => {
-    router.push(`/(customer)/restaurants/${restaurantId}`);
+  const handleRestaurantPress = (restaurantId: string, restaurantName: string) => {
+    const categoryIdParam = categoryId as string;
+    router.push({
+      pathname: "/(customer)/restaurants/[categoryId]/[restaurantId]",
+      params: { 
+        categoryId,
+        restaurantId,
+        restaurantName 
+      }
+    });
   };
 
   const renderRestaurantItem = ({ item }: { item: Restaurant }) => (
     <TouchableOpacity 
       style={styles.restaurantCard}
-      onPress={() => handleRestaurantPress(item.id)}
+      onPress={() => handleRestaurantPress(item.id, item.restaurantName)}
     >
       <View style={styles.restaurantInfo}>
         <Text style={styles.restaurantName}>{item.restaurantName}</Text>

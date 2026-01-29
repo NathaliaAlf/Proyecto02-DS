@@ -1,3 +1,4 @@
+// (customer)/index.tsx
 import { View } from '@/components/Themed';
 import { useTheme } from '@/context/ThemeContext';
 import { getImagesForImageButtons, ImageButtonsData } from '@/utils/categories';
