@@ -1,4 +1,4 @@
-// app/(customer)/restaurants/[categoryId].tsx
+// (customer)/restaurants/[categoryId]/index.tsx
 import { useTheme } from '@/context/ThemeContext';
 import { restaurantApi } from '@/services/api/restaurantApi';
 import { Restaurant } from '@/types/restaurant';
@@ -55,9 +55,11 @@ export default function RestaurantsByCategoryScreen() {
   };
 
   const handleRestaurantPress = (restaurantId: string, restaurantName: string) => {
+    const categoryIdParam = categoryId as string;
     router.push({
-      pathname: "/(customer)/restaurant/[restaurantId]",
+      pathname: "/(customer)/restaurants/[categoryId]/[restaurantId]",
       params: { 
+        categoryId,
         restaurantId,
         restaurantName 
       }

@@ -1,4 +1,4 @@
-// app/(customer)/restaurant/[restaurantId]/plate/[plateId].tsx
+// (customer)/restaurants/[categoryId]/[restaurantId]/plate/[plateId].tsx
 import { useTheme } from '@/context/ThemeContext';
 import { menuApi } from '@/services/api/menuApi';
 import { Plate } from '@/types/menu';
