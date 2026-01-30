@@ -1,13 +1,12 @@
-// (customer)/restaurants/layout.tsx
+// (customer)/_layout.tsx - This is the main customer layout
 import { useAuth } from '@/context/AuthContext';
 import { useTheme } from '@/context/ThemeContext';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
-
 import AntDesign from '@expo/vector-icons/AntDesign';
 import EvilIcons from '@expo/vector-icons/EvilIcons';
 import Feather from '@expo/vector-icons/Feather';
 import Ionicons from '@expo/vector-icons/Ionicons';
-import { router, Stack } from 'expo-router'; // Change from Tabs to Stack
+import { router, Stack } from 'expo-router';
 import { useRef, useState } from 'react';
 import {
     Animated,
@@ -24,7 +23,7 @@ import {
     View
 } from 'react-native';
 
-export default function MobileLayout() {
+export default function CustomerLayout() {
     const {user, logout} = useAuth();
     const {colors} = useTheme();
     const [isMenuOpen, setIsMenuOpen] = useState(false);
@@ -48,7 +47,7 @@ export default function MobileLayout() {
         await logout();
         router.replace('/(auth-customer)/login');
     };
-    
+
     const openMenu = () => {
         setIsMenuOpen(true);
         Animated.parallel([
@@ -92,6 +91,11 @@ export default function MobileLayout() {
         }
     };
 
+    // Function to navigate to cart screen
+    const goToCart = () => {
+        router.push('/Cart'); // Navigate to Cart screen
+    };
+
     return (
         <>
             <Stack screenOptions={{
@@ -131,6 +135,7 @@ export default function MobileLayout() {
                                 hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
                                 style={styles.headerButton}
                                 activeOpacity={0.7}
+                                onPress={goToCart}
                             >
                                 <Feather name="shopping-cart" style={styles.icon} />
                             </TouchableOpacity>
@@ -138,7 +143,55 @@ export default function MobileLayout() {
                     </View>
                 ),
             }}>
-                <Stack.Screen name="index" options={{ title: "Home" }} />
+                {/* Customer home screen */}
+                <Stack.Screen 
+                    name="index" 
+                    options={{ 
+                        title: "Home",
+                        headerShown: true
+                    }} 
+                />
+                
+                {/* Cart screen */}
+                <Stack.Screen 
+                    name="Cart" 
+                    options={{ 
+                        title: "Cart",
+                        headerShown: true,
+                        // Remove the cart button from the Cart screen header
+                        headerRight: () => null,
+                        headerLeft: () => (
+                            <Pressable
+                                hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+                                onPress={() => router.back()}
+                                style={styles.headerLeftContainer}
+                            >
+                                <AntDesign 
+                                    name="left" 
+                                    style={styles.icon}
+                                />
+                            </Pressable>
+                        ),
+                    }} 
+                />
+                
+                {/* Order History screen */}
+                <Stack.Screen 
+                    name="OrderHistory" 
+                    options={{ 
+                        title: "Order History",
+                        headerShown: true,
+                        headerRight: () => null,
+                    }} 
+                />
+                
+                {/* Restaurants group - this will use its own layout */}
+                <Stack.Screen 
+                    name="restaurants" 
+                    options={{ 
+                        headerShown: false 
+                    }} 
+                />
             </Stack>
 
             {/* Overlay */}
@@ -191,6 +244,19 @@ export default function MobileLayout() {
 
                     {/* Menu Items */}
                     <ScrollView style={styles.menuItemsContainer}>
+                        {/* Home menu item */}
+                        <TouchableOpacity
+                            style={styles.menuItem}
+                            activeOpacity={0.7}
+                            onPress={() => {
+                                closeMenu();
+                                router.push('/'); // Navigate to home
+                            }}
+                        >
+                            <Ionicons name="home-outline" style={styles.menuItemIcon} />
+                            <Text style={styles.menuItemText}>Home</Text>
+                        </TouchableOpacity>
+                        
                         {menuItems.map((item) => {
                             const IconComponent = item.iconLib;
                             return (
@@ -211,6 +277,32 @@ export default function MobileLayout() {
                                 </TouchableOpacity>
                             );
                         })}
+                        
+                        {/* Cart menu item */}
+                        <TouchableOpacity
+                            style={styles.menuItem}
+                            activeOpacity={0.7}
+                            onPress={() => {
+                                closeMenu();
+                                goToCart(); // Navigate to cart
+                            }}
+                        >
+                            <Feather name="shopping-cart" style={styles.menuItemIcon} />
+                            <Text style={styles.menuItemText}>Cart</Text>
+                        </TouchableOpacity>
+                        
+                        {/* Order History menu item */}
+                        <TouchableOpacity
+                            style={styles.menuItem}
+                            activeOpacity={0.7}
+                            onPress={() => {
+                                closeMenu();
+                                router.push('/OrderHistory'); // Navigate to order history
+                            }}
+                        >
+                            <Ionicons name="receipt-outline" style={styles.menuItemIcon} />
+                            <Text style={styles.menuItemText}>Order History</Text>
+                        </TouchableOpacity>
                     </ScrollView>
                 </Animated.View>
             )}
