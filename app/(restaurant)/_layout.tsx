@@ -1,3 +1,4 @@
+// app/restaurant/_layout
 import FontAwesome from '@expo/vector-icons/FontAwesome';
 import { Tabs } from 'expo-router';
 import React from 'react';
