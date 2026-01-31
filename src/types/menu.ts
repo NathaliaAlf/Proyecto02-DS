@@ -1,9 +1,16 @@
 // types/menu.ts
+
+// Ingredient with obligatory flag
+export interface Ingredient {
+  name: string;
+  obligatory: boolean; // If true, cannot be removed by customer
+}
+
 export interface MenuSectionOption {
   id: string;
   name: string;
   additionalCost?: number; // Extra cost for this option
-  ingredients?: string[]; // Ingredients to add/remove if ingredientDependent is true
+  ingredients?: Ingredient[]; // Ingredients to add/remove if ingredientDependent is true
 }
 
 export interface MenuSection {
@@ -20,7 +27,7 @@ export interface PlateVariant {
   variantKey: string; 
   variantName: string;
   price: number; // Base price + additional costs from selected options
-  ingredients: string[]; // Final ingredients list for this variant
+  ingredients: Ingredient[]; // Final ingredients list for this variant
   active: boolean; // Whether this variant is available
 }
 
@@ -29,7 +36,7 @@ export interface Plate {
   name: string;
   description: string;
   basePrice: number;
-  baseIngredients: string[]; // Base ingredients without any modifications
+  baseIngredients: Ingredient[]; // Base ingredients with obligatory flags
   imageUrl: string;
   active: boolean;
   sections: MenuSection[];
@@ -43,7 +50,7 @@ export interface PlateForCreation {
   name: string;
   description: string;
   basePrice: number;
-  baseIngredients: string[];
+  baseIngredients: Ingredient[];
   imageUrl: string;
   active: boolean;
   sections: MenuSectionCreateDTO[]; // DTOs without IDs
@@ -67,7 +74,7 @@ export interface Menu {
 export interface MenuSectionOptionCreateDTO {
   name: string;
   additionalCost?: number;
-  ingredients?: string[];
+  ingredients?: Ingredient[];
 }
 
 export interface MenuSectionCreateDTO {
@@ -82,7 +89,7 @@ export interface PlateCreateDTO {
   name: string;
   description: string;
   basePrice: number;
-  baseIngredients: string[];
+  baseIngredients: Ingredient[];
   imageUrl: string;
   sections: MenuSectionCreateDTO[];
 }
@@ -104,7 +111,7 @@ export interface PlateUpdateDTO {
   name?: string;
   description?: string;
   basePrice?: number;
-  baseIngredients?: string[];
+  baseIngredients?: Ingredient[];
   imageUrl?: string;
   active?: boolean;
   sections?: MenuSectionCreateDTO[];
@@ -125,10 +132,35 @@ export interface CustomizedPlate {
   selectedOptions: SelectedOption[];
   finalPrice: number;
   variantId?: string; // If matching a pre-calculated variant
-  customIngredients?: string[]; // If no matching variant
+  customIngredients?: Ingredient[]; // If no matching variant
 }
 
 export interface MenuSectionWithIds extends Omit<MenuSectionCreateDTO, 'options'> {
   id: string;
   options: MenuSectionOption[];
+}
+
+// Helper function to normalize ingredients from old format to new format
+export function normalizeIngredients(ingredients: any[]): Ingredient[] {
+  return ingredients.map(ing => {
+    // If it's already in the new format
+    if (typeof ing === 'object' && 'name' in ing && 'obligatory' in ing) {
+      return ing as Ingredient;
+    }
+    // If it's a string (old format)
+    if (typeof ing === 'string') {
+      return { name: ing, obligatory: false };
+    }
+    // If it's the nested format from your example
+    if (typeof ing === 'object' && 'ingridients' in ing && 'obligatory' in ing) {
+      // Extract the array of ingredient names and apply the obligatory flag
+      const ingredientNames = ing.ingridients || [];
+      return ingredientNames.map((name: string) => ({
+        name,
+        obligatory: ing.obligatory
+      }));
+    }
+    // Default fallback
+    return { name: String(ing), obligatory: false };
+  }).flat(); // Flatten in case nested format created arrays
 }
