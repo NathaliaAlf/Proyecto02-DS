@@ -1,3 +1,4 @@
+// /app/_layout
 import FontAwesome from '@expo/vector-icons/FontAwesome';
 import { useFonts } from 'expo-font';
 import { router, Stack, useRootNavigationState, useSegments } from 'expo-router';
@@ -63,65 +64,95 @@ function RootLayoutNav() {
         userType: user?.userType,
         currentPath: segments.join('/'),
         isWeb: isWeb,
-        inAuthGroup: isWeb ? segments[0] === '(auth-restaurant)' : segments[0] === '(auth-customer)'
+        currentGroup: segments[0]
       });
 
-      const inAuthGroup = isWeb 
-        ? segments[0] === '(auth-restaurant)' 
-        : segments[0] === '(auth-customer)';
+      const currentGroup = segments[0];
+      const customerLoginPath = '/(auth-customer)/login';
+      const restaurantLoginPath = '/(auth-restaurant)/login';
+      const customerAppPath = '/(customer)';
+      const restaurantAppPath = '/(restaurant)';
       
-      const webLoginPath = '/(auth-restaurant)/login';
-      const mobileLoginPath = '/(auth-customer)/login';
-      const webAppPath = '/(restaurant)';
-      const mobileAppPath = '/(customer)';
+      const inCustomerAuth = currentGroup === '(auth-customer)';
+      const inRestaurantAuth = currentGroup === '(auth-restaurant)';
+      const inCustomerApp = currentGroup === '(customer)';
+      const inRestaurantApp = currentGroup === '(restaurant)';
+      const inAuthGroup = inCustomerAuth || inRestaurantAuth;
+      const inAppGroup = inCustomerApp || inRestaurantApp;
 
-      // No user, go to login
+      // No user, go to login based on platform
       if (!user) {
         setHasChecked(true);
-        const currentGroup = segments[0];
-        const isInAppGroup = isWeb 
-          ? currentGroup === '(restaurant)'
-          : currentGroup === '(customer)';
         
-        // Redirect if in app group or not in correct auth group
-        if (isInAppGroup || !inAuthGroup) {
-          console.log('No user, redirecting to login from:', currentGroup);
-          const loginPath = isWeb ? webLoginPath : mobileLoginPath;
+        // Redirect if in app group
+        if (inAppGroup) {
+          console.log('No user, redirecting to login from app group');
+          const loginPath = isWeb ? restaurantLoginPath : customerLoginPath;
           router.replace(loginPath);
         }
         return;
       }
 
-      // User exists, check user type and platform compatibility
+      // User exists - redirect based on USER TYPE, not platform
       setIsCheckingSetup(true);
       
       try {
         console.log('User exists:', {
           userType: user.userType,
           isWeb: isWeb,
-          restaurantId: user.restaurantId
+          restaurantId: user.restaurantId,
+          currentGroup
         });
 
-        // Check platform-user type compatibility
-        if (isWeb && user.userType === 'customer') {
-          // Customer user on web - redirect to mobile
-          console.log('Customer user on web, redirecting to mobile login or showing message');
-          if (inAuthGroup) {
-            // Could show a message or redirect
-            router.replace(mobileLoginPath);
+        // CUSTOMER USER
+        if (user.userType === 'customer') {
+          // Customer should be in customer routes
+          if (inRestaurantAuth || inRestaurantApp) {
+            console.log('Customer user in restaurant routes, redirecting to customer app');
+            router.replace(customerAppPath);
+          } else if (inCustomerAuth) {
+            // In customer auth, go to customer app
+            console.log('Customer user in auth, going to customer app');
+            router.replace(customerAppPath);
           }
-        } else if (!isWeb && user.userType === 'restaurant') {
-          // Restaurant user on mobile - could redirect to web or show message
-          console.log('Restaurant user on mobile, staying for now');
-          // Continue to mobile app for now
-          if (inAuthGroup) {
-            router.replace(mobileAppPath);
-          }
-        } else {
-          // Platform and user type match or mobile customer
-          
-          if (user.userType === 'restaurant' && isWeb) {
-            // Restaurant user on web - check setup status
+          // If already in customer app, do nothing
+        } 
+        // RESTAURANT USER
+        else if (user.userType === 'restaurant') {
+          // Restaurant should be in restaurant routes
+          if (inCustomerAuth || inCustomerApp) {
+            console.log('Restaurant user in customer routes, redirecting to restaurant setup/app');
+            
+            // Check restaurant setup status
+            try {
+              const { restaurantApi } = await import('@/services/api/restaurantApi');
+              const restaurantResult = await restaurantApi.getRestaurantByUid(user.uid);
+              
+              if (restaurantResult.success && restaurantResult.data) {
+                const restaurant = restaurantResult.data;
+                
+                if (restaurant.setupCompleted) {
+                  router.replace(restaurantAppPath);
+                } else {
+                  // Redirect to appropriate setup step
+                  if (!restaurant.restaurantName || restaurant.restaurantName === 'My Restaurant') {
+                    router.replace('/(auth-restaurant)/registerForm');
+                  } else if (!restaurant.profileImage || !restaurant.headerImage) {
+                    router.replace('/(auth-restaurant)/profile-pictures');
+                  } else {
+                    router.replace('/(auth-restaurant)/registerForm');
+                  }
+                }
+              } else {
+                // No restaurant found, go to register form
+                router.replace('/(auth-restaurant)/registerForm');
+              }
+            } catch (error) {
+              console.error('Error checking restaurant:', error);
+              router.replace('/(auth-restaurant)/registerForm');
+            }
+          } else if (inRestaurantAuth) {
+            // In restaurant auth, check setup status
             try {
               const { restaurantApi } = await import('@/services/api/restaurantApi');
               const restaurantResult = await restaurantApi.getRestaurantByUid(user.uid);
@@ -136,13 +167,11 @@ function RootLayoutNav() {
                 const restaurant = restaurantResult.data;
                 
                 if (restaurant.setupCompleted) {
-                  // Setup complete
+                  // Setup complete, go to app
                   console.log('Layout - Setup complete, going to restaurant app');
-                  if (inAuthGroup) {
-                    router.replace(webAppPath);
-                  }
+                  router.replace(restaurantAppPath);
                 } else {
-                  // Setup incomplete
+                  // Setup incomplete - check which step
                   console.log('Layout - Setup incomplete, checking missing data:', {
                     hasName: !!restaurant.restaurantName,
                     hasProfileImage: !!restaurant.profileImage,
@@ -150,51 +179,38 @@ function RootLayoutNav() {
                   });
                   
                   if (!restaurant.restaurantName || restaurant.restaurantName === 'My Restaurant') {
-                    // Missing restaurant name
-                    console.log('Layout - Missing restaurant name, staying on registerForm');
-                    // Don't redirect if already on registerForm
-                    if (segments[1] !== 'registerForm' && inAuthGroup) {
+                    // Missing restaurant name - stay on/go to registerForm
+                    if (segments[1] !== 'registerForm') {
                       router.replace('/(auth-restaurant)/registerForm');
                     }
                   } else if (!restaurant.profileImage || !restaurant.headerImage) {
-                    // Missing images
-                    console.log('Layout - Missing images, going to profile-pictures');
-                    if (segments[1] !== 'profile-pictures' && inAuthGroup) {
+                    // Missing images - go to profile-pictures
+                    if (segments[1] !== 'profile-pictures') {
                       router.replace('/(auth-restaurant)/profile-pictures');
                     }
                   } else {
-                    // Has all data but setup not marked complete
-                    console.log('Layout - Has data but setup not marked, going to registerForm');
-                    if (segments[1] !== 'registerForm' && inAuthGroup) {
+                    // Has all data but not marked complete
+                    if (segments[1] !== 'registerForm') {
                       router.replace('/(auth-restaurant)/registerForm');
                     }
                   }
                 }
               } else {
-                // No restaurant document found
-                console.log('Layout - No restaurant found, staying on current screen');
-                // Let the login screen handle the redirect
+                // No restaurant found
+                console.log('Layout - No restaurant found, going to registerForm');
+                if (segments[1] !== 'registerForm') {
+                  router.replace('/(auth-restaurant)/registerForm');
+                }
               }
             } catch (error) {
               console.error('Layout - Error checking restaurant:', error);
             }
-          } else {
-            // Customer user on mobile (or any other valid combo)
-            if (inAuthGroup) {
-              console.log('Going to app');
-              const appPath = isWeb ? webAppPath : mobileAppPath;
-              router.replace(appPath);
-            }
           }
+          // If already in restaurant app, do nothing
         }
         
       } catch (error) {
         console.error('Error in navigation check:', error);
-        // Fallback redirect
-        if (inAuthGroup) {
-          const appPath = isWeb ? webAppPath : mobileAppPath;
-          router.replace(appPath);
-        }
       } finally {
         setIsCheckingSetup(false);
         setHasChecked(true);

@@ -1,23 +1,24 @@
 import { db } from '@/config/firebase';
 import {
-    addDoc,
-    collection,
-    deleteDoc,
-    doc,
-    getDoc,
-    getDocs,
-    limit,
-    orderBy,
-    query,
-    updateDoc,
-    where
+  addDoc,
+  collection,
+  deleteDoc,
+  doc,
+  getDoc,
+  getDocs,
+  limit,
+  orderBy,
+  query,
+  updateDoc,
+  where
 } from 'firebase/firestore';
 
 import {
-    RestaurantUser,
-    User,
-    UserCreateDTO,
-    UserUpdateDTO
+  CustomerUser,
+  RestaurantUser,
+  User,
+  UserCreateDTO,
+  UserUpdateDTO
 } from '@/types/user';
 
 export const userApi = {
@@ -41,7 +42,9 @@ export const userApi = {
           lastLogin: userData.lastLogin,
           loginSource: userData.loginSource,
           createdAt: userData.createdAt,
-          updatedAt: userData.updatedAt
+          updatedAt: userData.updatedAt,
+          customerId: userData.customerId || undefined, // Add this
+          restaurantId: userData.restaurantId || undefined // Add this
         };
         
         // Add type-specific fields
@@ -84,7 +87,9 @@ export const userApi = {
           lastLogin: userData.lastLogin,
           loginSource: userData.loginSource,
           createdAt: userData.createdAt,
-          updatedAt: userData.updatedAt
+          updatedAt: userData.updatedAt,
+          customerId: userData.customerId || undefined, // Add this
+          restaurantId: userData.restaurantId || undefined // Add this
         };
         
         if (userData.userType === 'restaurant') {
@@ -128,15 +133,50 @@ export const userApi = {
         lastLogin: new Date().toISOString(),
         loginSource: userData.loginSource || 'web',
         createdAt: new Date().toISOString(),
-        updatedAt: new Date().toISOString()
+        updatedAt: new Date().toISOString(),
+        customerId: userData.customerId || null,
+        restaurantId: userData.restaurantId || null
       };
       
       const docRef = await addDoc(usersRef, newUser);
       
-      const createdUser: User = {
-        id: docRef.id,
-        ...newUser
-      };
+      // Create the user object based on user type
+      let createdUser: User;
+      
+      if (newUser.userType === 'restaurant') {
+        createdUser = {
+          id: docRef.id,
+          uid: newUser.uid,
+          email: newUser.email,
+          name: newUser.name,
+          picture: newUser.picture,
+          provider: newUser.provider,
+          userType: 'restaurant',
+          emailVerified: newUser.emailVerified,
+          lastLogin: newUser.lastLogin,
+          loginSource: newUser.loginSource,
+          createdAt: newUser.createdAt,
+          updatedAt: newUser.updatedAt,
+          restaurantId: newUser.restaurantId
+        } as RestaurantUser;
+      } else {
+        // Customer user
+        createdUser = {
+          id: docRef.id,
+          uid: newUser.uid,
+          email: newUser.email,
+          name: newUser.name,
+          picture: newUser.picture,
+          provider: newUser.provider,
+          userType: 'customer',
+          emailVerified: newUser.emailVerified,
+          lastLogin: newUser.lastLogin,
+          loginSource: newUser.loginSource,
+          createdAt: newUser.createdAt,
+          updatedAt: newUser.updatedAt,
+          customerId: newUser.customerId
+        } as CustomerUser;
+      }
       
       return { success: true, data: createdUser };
     } catch (error) {
@@ -190,7 +230,9 @@ export const userApi = {
         lastLogin: updatedData!.lastLogin,
         loginSource: updatedData!.loginSource,
         createdAt: updatedData!.createdAt,
-        updatedAt: updatedData!.updatedAt
+        updatedAt: updatedData!.updatedAt,
+        customerId: updatedData!.customerId || undefined, // Add this
+        restaurantId: updatedData!.restaurantId || undefined // Add this
       };
       
       if (updatedData!.userType === 'restaurant') {

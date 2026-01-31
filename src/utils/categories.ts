@@ -1,4 +1,4 @@
-type ImageButtonItem = {
+export type ImageButtonItem = {
     id: string;
     title: string;
     imageKey: string;

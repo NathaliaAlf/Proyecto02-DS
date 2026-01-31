@@ -1,15 +1,16 @@
 // context/AuthContext
+import { customerApi } from '@/services/api/customerApi';
 import { restaurantApi } from "@/services/api/restaurantApi";
 import { userApi } from "@/services/api/userApi";
 import { restaurantRegistrationService } from "@/services/restaurantRegistrationService";
 import { saveCustomerUser, saveRestaurantUser, saveUserIfNotExists } from "@/services/userService";
+import { Customer, ShoppingCart } from "@/types/customer";
 import { deleteItem, getItem, saveItem } from "@/utils/storage";
 import * as AuthSession from "expo-auth-session";
 import * as WebBrowser from "expo-web-browser";
 import { jwtDecode } from "jwt-decode";
 import React, { createContext, useContext, useEffect, useState } from "react";
 import { Platform } from "react-native";
-
 WebBrowser.maybeCompleteAuthSession();
 
 const AUTH0_DOMAIN = process.env.EXPO_PUBLIC_AUTH0_DOMAIN!;
@@ -52,6 +53,8 @@ export type AppUser = {
   provider?: string;
   restaurantId?: string;
   restaurant?: RestaurantData | null;
+  customerId?: string;
+  customer?: Customer | null; // Add this line
 };
 
 type StoredTokens = {
@@ -72,6 +75,8 @@ type AuthContextType = {
   isLoggingIn: boolean;
   refreshUser: () => Promise<void>;
   getRestaurantData: () => Promise<RestaurantData | null>;
+  getCustomerData: () => Promise<Customer | null>; // Add this
+  getShoppingCart: () => Promise<ShoppingCart | null>; // Add this
   registerAsCustomer: (auth0Profile: Auth0Profile, loginSource?: string) => Promise<void>;
   registerAsRestaurant: (auth0Profile: Auth0Profile, loginSource?: string) => Promise<void>;
   completeRestaurantProfile: (restaurantData: any) => Promise<boolean>;
@@ -238,6 +243,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
   }, [response]);
 
+
   const restoreSession = async () => {
     try {
       const stored = await getItem("authTokens");
@@ -257,15 +263,29 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       const auth0Profile = jwtDecode<Auth0Profile>(tokens.idToken);
       const firebaseUser = await saveUserIfNotExists(auth0Profile);
       
-      // Fetch restaurant data if needed
+      // Fetch additional data based on user type
       let restaurantData = null;
+      let customerData = null;
+      
       if (firebaseUser.userType === 'restaurant') {
         restaurantData = await fetchRestaurantData(firebaseUser.uid, firebaseUser.restaurantId);
+      } else if (firebaseUser.userType === 'customer') {
+        // Fetch customer data
+        try {
+          const { customerApi } = await import('@/services/api/customerApi');
+          const customerResult = await customerApi.getCustomerByUid(firebaseUser.uid);
+          if (customerResult.success && customerResult.data) {
+            customerData = customerResult.data;
+          }
+        } catch (error) {
+          console.error('Error fetching customer data:', error);
+        }
       }
       
       setUser({
         ...firebaseUser,
-        restaurant: restaurantData
+        restaurant: restaurantData,
+        customer: customerData // Add this line
       });
 
     } catch (error) {
@@ -309,6 +329,36 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       console.error("Error refreshing user:", error);
     } finally {
       setLoading(false);
+    }
+  };
+
+  const getCustomerData = async (): Promise<Customer | null> => {
+    if (!user || user.userType !== 'customer') return null;
+    
+    try {
+      const customerResult = await customerApi.getCustomerByUid(user.uid);
+      if (customerResult.success && customerResult.data) {
+        return customerResult.data;
+      }
+      return null;
+    } catch (error) {
+      console.error('Error fetching customer data:', error);
+      return null;
+    }
+  };
+
+  const getShoppingCart = async (): Promise<ShoppingCart | null> => {
+    if (!user || user.userType !== 'customer' || !user.customerId) return null;
+    
+    try {
+      const cartResult = await customerApi.getShoppingCart(user.customerId);
+      if (cartResult.success && cartResult.data) {
+        return cartResult.data;
+      }
+      return null;
+    } catch (error) {
+      console.error('Error fetching shopping cart:', error);
+      return null;
     }
   };
 
@@ -479,6 +529,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       isLoggingIn,
       refreshUser,
       getRestaurantData,
+      getCustomerData,
+      getShoppingCart,
       registerAsCustomer,
       registerAsRestaurant,
       completeRestaurantProfile,

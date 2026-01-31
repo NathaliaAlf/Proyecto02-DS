@@ -1,3 +1,4 @@
+// types/user.ts
 export type UserType = 'customer' | 'restaurant';
 
 export interface BaseUser {
@@ -13,6 +14,8 @@ export interface BaseUser {
   loginSource: string;
   createdAt: string;
   updatedAt: string;
+  customerId?: string;
+  restaurantId?: string;
 }
 
 export interface CustomerUser extends BaseUser {
@@ -37,6 +40,8 @@ export interface UserCreateDTO {
   userType: UserType;
   emailVerified?: boolean;
   loginSource?: string;
+  customerId?: string;
+  restaurantId?: string;
 }
 
 export interface UserUpdateDTO {
@@ -44,5 +49,6 @@ export interface UserUpdateDTO {
   picture?: string;
   lastLogin?: string;
   loginSource?: string;
+  customerId?: string;
+  restaurantId?: string;
 }
-
