@@ -303,17 +303,32 @@ export const restaurantApi = {
   // Search restaurants
   async searchRestaurants(searchTerm: string): Promise<{ success: boolean; data?: Restaurant[]; error?: string }> {
     try {
+      console.log(`[restaurantApi] Searching restaurants for: "${searchTerm}"`);
+      
+      if (!searchTerm.trim()) {
+        console.log('[restaurantApi] Empty search term, returning empty array');
+        return { success: true, data: [] };
+      }
+      
       const restaurantsRef = collection(db, 'restaurants');
+      const lowercaseSearchTerm = searchTerm.toLowerCase();
+      
+      // Firestore doesn't support case-insensitive search directly
+      // We need to store a lowercase version or query differently
       const q = query(
         restaurantsRef,
-        where('restaurantName', '>=', searchTerm.toLowerCase()),
-        where('restaurantName', '<=', searchTerm.toLowerCase() + '\uf8ff'),
+        where('restaurantNameLowercase', '>=', lowercaseSearchTerm),
+        where('restaurantNameLowercase', '<=', lowercaseSearchTerm + '\uf8ff'),
         limit(20)
       );
       
+      console.log('[restaurantApi] Firestore query created');
       const querySnapshot = await getDocs(q);
+      console.log(`[restaurantApi] Query returned ${querySnapshot.size} documents`);
+      
       const restaurants: Restaurant[] = querySnapshot.docs.map(docSnap => {
         const restaurantData = docSnap.data();
+        console.log(`[restaurantApi] Processing restaurant: ${restaurantData.restaurantName}`);
         return {
           id: docSnap.id,
           uid: restaurantData.uid,
@@ -335,9 +350,10 @@ export const restaurantApi = {
         };
       });
       
+      console.log(`[restaurantApi] Returning ${restaurants.length} restaurants`);
       return { success: true, data: restaurants };
     } catch (error) {
-      console.error('Error searching restaurants:', error);
+      console.error('[restaurantApi] Error searching restaurants:', error);
       return { 
         success: false, 
         error: error instanceof Error ? error.message : 'Failed to search restaurants' 
