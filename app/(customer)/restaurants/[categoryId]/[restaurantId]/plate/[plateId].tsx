@@ -1,5 +1,5 @@
 // (customer)/restaurants/[categoryId]/[restaurantId]/plate/[plateId].tsx
-import { useAuth } from '@/context/AuthContext'; // Add this import
+import { useAuth } from '@/context/AuthContext';
 import { useTheme } from '@/context/ThemeContext';
 import { useCart } from '@/hooks/useCart';
 import { menuApi } from '@/services/api/menuApi';
