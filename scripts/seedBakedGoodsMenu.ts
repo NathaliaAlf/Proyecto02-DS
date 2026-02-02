@@ -26,7 +26,7 @@ if (!firebaseConfig.projectId || !firebaseConfig.apiKey) {
 const app = initializeApp(firebaseConfig);
 const db = getFirestore(app);
 
-const RESTAURANT_ID = 'test-restaurant-01991e1b-6140-4b04-afc1-ad7e8808e2d6';
+const RESTAURANT_ID = 'C6lrz994sDXZGM3durJL';
 
 // Helper function to create sections with IDs
 function createSections(sectionDTOs: any[]): any[] {

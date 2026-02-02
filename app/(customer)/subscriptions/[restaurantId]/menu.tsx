@@ -82,9 +82,8 @@ export default function RestaurantDetailScreen() {
   const handlePlatePress = (plate: Plate) => {
     // Navigate to plate detail screen (you can create this later)
     router.push({
-      pathname: "/(customer)/restaurants/[categoryId]/[restaurantId]/plate/[plateId]",
+      pathname: "/(customer)/subscriptions/[restaurantId]/plate/[plateId]",
       params: { 
-        categoryId,
         restaurantId,
         restaurantName: restaurant?.restaurantName || '',
         plateId: plate.id,
@@ -157,15 +156,9 @@ export default function RestaurantDetailScreen() {
           {restaurant?.restaurantName || restaurantName}
         </Text>
       </View>
-      <TouchableOpacity style={
-          isSubscribed ?
-          styles.subscribedButton :
-          styles.subscribeButton
-        }
-        onPress={handleSubscribePress} >
-        <Text style={styles.subcribeText}>{isSubscribed? 'Unsubscribe' : 'Subscribe'}</Text>
-      </TouchableOpacity>
-
+      <View>
+        <Text style={styles.dayAndTimeText}>Create an order for Monday first meal</Text>
+      </View>
       {/* Plates List */}
       {plates.length === 0 ? (
         <View style={styles.emptyContainer}>
@@ -249,26 +242,10 @@ const createStyles = (colors: any) => StyleSheet.create({
     color: colors.text,
     flex: 1,
   },
-  subscribeButton: {
-    backgroundColor: colors.second,
-    width: 150,
-    alignContent: 'center',
-    margin: 20,
-    borderRadius: 10,
-  },
-  subscribedButton:{
-    width: 150,
-    alignContent: 'center',
-    margin: 20,
-    borderRadius: 10,
-    borderColor: colors.defaultColor,
-    borderWidth: 2,
-  },
-  subcribeText: {
-    fontSize: 15,
-    fontWeight: 700,
-    margin: 'auto',
-    padding: 5,
+  dayAndTimeText: {
+    marginLeft: 20,
+    fontSize: 17,
+    marginBottom: 20,
   },
   platesList: {
     paddingHorizontal: 15,

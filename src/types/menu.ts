@@ -1,4 +1,10 @@
 // types/menu.ts
+
+export interface Ingredient {
+  name: string;
+  obligatory: boolean; 
+}
+
 export interface MenuSectionOption {
   id: string;
   name: string;
