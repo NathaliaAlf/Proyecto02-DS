@@ -8,6 +8,7 @@ import { ActivityIndicator, Platform, Text, View } from 'react-native';
 import 'react-native-reanimated';
 
 import { AuthProvider, useAuth } from '@/context/AuthContext';
+import { SubscriptionProvider } from '@/context/SubscriptionContext';
 import { ThemeProvider } from '@/context/ThemeContext';
 
 export { ErrorBoundary } from 'expo-router';
@@ -33,11 +34,13 @@ export default function RootLayout() {
   if (!loaded) return null;
 
   return (
-    <ThemeProvider>
-      <AuthProvider>
-        <RootLayoutNav />
-      </AuthProvider>
-    </ThemeProvider>
+    <SubscriptionProvider>
+      <ThemeProvider>
+        <AuthProvider>
+          <RootLayoutNav />
+        </AuthProvider>
+      </ThemeProvider>
+    </SubscriptionProvider>
   );
 }
 

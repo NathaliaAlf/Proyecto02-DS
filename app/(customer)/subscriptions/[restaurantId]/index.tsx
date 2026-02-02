@@ -1,4 +1,5 @@
 // app/(customer)/subscriptions/[restaurantId]/index.tsx
+import { DaySchedule, SelectedMeal, useSubscription } from '@/context/SubscriptionContext';
 import { useTheme } from '@/context/ThemeContext';
 import { restaurantApi } from '@/services/api/restaurantApi';
 import Ionicons from '@expo/vector-icons/Ionicons';
@@ -67,6 +68,7 @@ const initializeMatrix = (): Record<DayOfWeek, Record<MealType, boolean>> => {
 };
 
 export default function SubscriptionSetupScreen() {
+  const { setSelectedSchedule } = useSubscription();
   const { restaurantId, categoryId } = useLocalSearchParams<{
     restaurantId: string;
     categoryId: string;
@@ -210,45 +212,69 @@ export default function SubscriptionSetupScreen() {
   };
 
   const handleCreateSubscription = () => {
-    const selectedItems: string[] = [];
-    
-    DAYS.forEach(day => {
+    // Create the structured schedule
+    const selectedSchedule: DaySchedule[] = [];
+
+    // Sort days and meals
+    const dayOrder = { monday: 1, tuesday: 2, wednesday: 3, thursday: 4, friday: 5, saturday: 6, sunday: 7 };
+    const mealOrder = { breakfast: 1, lunch: 2, dinner: 3 };
+
+    const sortedDays = [...DAYS].sort((a, b) => dayOrder[a.key] - dayOrder[b.key]);
+
+    sortedDays.forEach((day, dayIndex) => {
       const dayKey = day.key;
       const dayLabel = day.label;
-      MEALS.forEach(meal => {
+      const dayMeals: SelectedMeal[] = [];
+
+      const sortedMeals = [...MEALS].sort((a, b) => mealOrder[a.key] - mealOrder[b.key]);
+
+      sortedMeals.forEach((meal, mealIndex) => {
         const mealKey = meal.key;
         const mealLabel = meal.label;
         if (config.matrix[dayKey][mealKey]) {
-          selectedItems.push(`${dayLabel} ${mealLabel}`);
+          dayMeals.push({
+            type: mealKey,
+            typeLabel: mealLabel,
+            startTime: config.mealTimes[mealKey].start,
+            mealIndex,
+            completed: false
+          });
         }
       });
+
+      if (dayMeals.length > 0) {
+        selectedSchedule.push({
+          day: dayKey,
+          dayLabel,
+          dayIndex,
+          meals: dayMeals
+        });
+      }
     });
 
-    Alert.alert(
-      'Confirm Subscription',
-      `You are subscribing to:\n\n` +
-      `• ${selectedItems.length} time slots\n` +
-      `• Price: $${calculateSubscriptionPrice()} per week\n\n` +
-      `Meal times:\n` +
-      `• 1st: ${formatTime(config.mealTimes.breakfast.start)}\n` +
-      `• 2nd: ${formatTime(config.mealTimes.lunch.start)}\n` +
-      `• 3rd: ${formatTime(config.mealTimes.dinner.start)}`,
-      [
-        { text: 'Cancel', style: 'cancel' },
-        { 
-          text: 'Subscribe', 
-          onPress: () => {
-            // Here you would save the subscription to your backend
-            Alert.alert('Success', 'Subscription created successfully!');
-            router.back();
-          }
-        }
-      ]
-    );
+    if (selectedSchedule.length === 0) {
+      Alert.alert('No Meals Selected', 'Please select at least one meal to continue.');
+      return;
+    }
+
+    // Save to context
+    setSelectedSchedule(selectedSchedule);
+
+    // Navigate directly to first meal
+    const firstDay = selectedSchedule[0];
+    const firstMeal = firstDay.meals[0];
+    
     router.push({
       pathname: '/subscriptions/[restaurantId]/menu',
-      params: {restaurantId}
-    })
+      params: { 
+        restaurantId,
+        categoryId: categoryId || '',
+        dayId: firstDay.day,
+        mealTimeId: firstMeal.type,
+        restaurantName: restaurant?.restaurantName || '',
+        subscriptionFlow: 'true'
+      }
+    });
   };
 
   if (loading) {

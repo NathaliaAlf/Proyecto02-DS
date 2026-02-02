@@ -74,7 +74,7 @@ export default function RestaurantDetailScreen() {
     }else{
       router.push({
         pathname: "/subscriptions/[restaurantId]",
-        params: { restaurantId }
+        params: { restaurantId, categoryId }
       });
     }
   }
