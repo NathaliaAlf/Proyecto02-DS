@@ -365,34 +365,17 @@ export default function RestaurantDetailScreen() {
   };
 
   const handleViewOrder = () => {
-    if (isSubscriptionFlow) {
-      // In subscription flow, show current order summary
-      const orderItems = Object.entries(selectedPlates)
-        .map(([plateId, quantity]) => {
-          const plate = plates.find(p => p.id === plateId);
-          return `${quantity}x ${plate?.name || 'Item'}`;
-        })
-        .join('\n');
-
-      Alert.alert(
-        'Current Order',
-        getSelectedCount() === 0 
-          ? 'No items selected yet.'
-          : `You have selected ${getSelectedCount()} items for ${dayAndTimeText}.\n\n${orderItems}`,
-        [{ text: 'OK' }]
-      );
-    } else {
-      // Navigate to order summary view for regular flow
-      router.push({
-        pathname: '/(customer)/subscriptions/order',
-        params: {
-          restaurantId,
-          selectedPlates: JSON.stringify(selectedPlates),
-          dayId: dayId || '',
-          mealTimeId: mealTimeId || ''
-        }
-      });
-    }
+    router.push({
+      pathname: '/(customer)/subscriptions/order',
+      params: {
+        restaurantId,
+        restaurantName: restaurant?.restaurantName || '',
+        categoryId: categoryId || '',
+        dayId: dayId || '',
+        mealTimeId: mealTimeId || '',
+        subscriptionFlow: isSubscriptionFlow ? 'true' : undefined
+      }
+    });
   };
 
   const renderPlateItem = ({ item }: { item: Plate }) => {
