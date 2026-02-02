@@ -2,6 +2,7 @@
 import { useAuth } from '@/context/AuthContext';
 import { customerApi } from '@/services/api/customerApi';
 import { CartItem, ShoppingCart } from '@/types/customer';
+import { Ingredient } from '@/types/menu';
 import { useCallback, useState } from 'react';
 
 export function useCart() {
@@ -60,8 +61,9 @@ export function useCart() {
       additionalCost: number;
     }>,
     variantId?: string,
-    customIngredients?: string[],
-    imageUrl?: string
+    customIngredients?: Ingredient[],
+    imageUrl?: string,
+    notes?: string
   ) => {
     // Check if user is logged in and is a customer
     if (!user) {
@@ -91,7 +93,8 @@ export function useCart() {
         price,
         imageUrl,
         restaurantId,
-        restaurantName
+        restaurantName,
+        notes: notes || ''
       };
       
       const result = await customerApi.addToCart(user.customerId, cartItem);

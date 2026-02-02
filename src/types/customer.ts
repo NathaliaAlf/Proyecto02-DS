@@ -1,5 +1,7 @@
 // types/customer.ts
 
+import { Ingredient } from "./menu";
+
 export interface Customer {
   id: string;
   uid: string; // Reference to auth UID
@@ -65,15 +67,16 @@ export interface CartItem {
   menuId: string;
   plateId: string;
   plateName: string;
-  variantId?: string | null; // Allow null
-  customIngredients?: string[] | null; // Allow null
+  variantId?: string | null;
+  customIngredients?: Ingredient[] | null;
   selectedOptions: SelectedOption[];
   quantity: number;
   price: number;
-  imageUrl?: string | null; // Allow null
+  imageUrl?: string | null;
   restaurantId: string;
   restaurantName: string;
   addedAt: string;
+  notes?: string; 
 }
 
 export interface SelectedOption {
@@ -119,6 +122,7 @@ export interface OrderItem {
   quantity: number;
   price: number;
   imageUrl?: string;
+  notes?: string;
 }
 
 export interface Order {

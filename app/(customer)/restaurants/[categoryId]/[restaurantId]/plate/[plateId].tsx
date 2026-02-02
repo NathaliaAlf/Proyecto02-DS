@@ -4,7 +4,7 @@ import { useTheme } from '@/context/ThemeContext';
 import { useCart } from '@/hooks/useCart';
 import { menuApi } from '@/services/api/menuApi';
 import { restaurantApi } from '@/services/api/restaurantApi';
-import { Plate } from '@/types/menu';
+import { Ingredient, Plate } from '@/types/menu';
 import { LinearGradient } from 'expo-linear-gradient';
 import { router, useLocalSearchParams } from 'expo-router';
 import { useEffect, useState } from 'react';
@@ -12,9 +12,13 @@ import {
   ActivityIndicator,
   Alert,
   Image,
+  KeyboardAvoidingView,
+  Modal,
+  Platform,
   ScrollView,
   StyleSheet,
   Text,
+  TextInput,
   TouchableOpacity,
   View
 } from 'react-native';
@@ -22,7 +26,7 @@ import { Checkbox } from 'react-native-paper';
 
 export default function PlateDetailScreen() {
   const { colors } = useTheme();
-  const { user } = useAuth(); // Get user from auth context
+  const { user } = useAuth();
   const styles = createStyles(colors);
   const { restaurantId, plateId, plateName } = useLocalSearchParams<{
     restaurantId: string;
@@ -38,8 +42,11 @@ export default function PlateDetailScreen() {
   const [loading, setLoading] = useState(true);
   const [addingToCart, setAddingToCart] = useState(false);
   const [selectedOptions, setSelectedOptions] = useState<Record<string, string[]>>({});
-  const [selectedIngredients, setSelectedIngredients] = useState<number[]>([]);
+  const [removedIngredients, setRemovedIngredients] = useState<Set<string>>(new Set());
   const [quantity, setQuantity] = useState(1);
+  const [notes, setNotes] = useState<string>('');
+  const [showNotesModal, setShowNotesModal] = useState(false);
+  const [modalNotes, setModalNotes] = useState('');
 
   useEffect(() => {
     loadPlate();
@@ -49,14 +56,12 @@ export default function PlateDetailScreen() {
     try {
       if (!restaurantId || !plateId) return;
       
-      // Get active menu for the restaurant
       const menuResult = await menuApi.getActiveMenu(restaurantId);
       if (menuResult.success && menuResult.data) {
         setMenuId(menuResult.data.id);
         const foundPlate = menuResult.data.plates.find(p => p.id === plateId);
         setPlate(foundPlate || null);
         
-        // Get restaurant name
         const restaurantResult = await restaurantApi.getRestaurant(restaurantId);
         if (restaurantResult.success && restaurantResult.data) {
           setRestaurantName(restaurantResult.data.restaurantName);
@@ -69,13 +74,20 @@ export default function PlateDetailScreen() {
     }
   };
 
-  const toggleIngredient = (index: number) => {
-    setSelectedIngredients(prev => {
-      if (prev.includes(index)) {
-        return prev.filter(i => i !== index);
+  const toggleIngredient = (ingredientName: string, isObligatory: boolean) => {
+    // Don't allow toggling obligatory ingredients
+    if (isObligatory) {
+      return;
+    }
+
+    setRemovedIngredients(prev => {
+      const newSet = new Set(prev);
+      if (newSet.has(ingredientName)) {
+        newSet.delete(ingredientName);
       } else {
-        return [...prev, index];
+        newSet.add(ingredientName);
       }
+      return newSet;
     });
   };
 
@@ -84,7 +96,6 @@ export default function PlateDetailScreen() {
       const current = prev[sectionId] || [];
       
       if (multiple) {
-        // Toggle the option
         if (current.includes(optionId)) {
           return {
             ...prev,
@@ -97,7 +108,6 @@ export default function PlateDetailScreen() {
           };
         }
       } else {
-        // Single selection - replace
         return {
           ...prev,
           [sectionId]: [optionId]
@@ -168,19 +178,83 @@ export default function PlateDetailScreen() {
     return selectedOptionDetails;
   };
 
-  const getCustomIngredients = () => {
+  const getCurrentIngredients = () => {
     if (!plate) return [];
     
-    // Filter out deselected ingredients
-    const customIngredients = plate.baseIngredients.filter((_, index) => 
-      !selectedIngredients.includes(index)
-    );
+    // Start with base ingredients
+    let allIngredients = [...plate.baseIngredients];
     
-    return customIngredients;
+    // Add ingredients from selected options that are ingredient-dependent
+    Object.entries(selectedOptions).forEach(([sectionId, optionIds]) => {
+      const section = plate.sections.find(s => s.id === sectionId);
+      if (section?.ingredientDependent) {
+        optionIds.forEach(optionId => {
+          const option = section.options.find(o => o.id === optionId);
+          if (option?.ingredients) {
+            allIngredients = [...allIngredients, ...option.ingredients];
+          }
+        });
+      }
+    });
+    
+    // Remove duplicates based on ingredient name while preserving the first occurrence
+    const uniqueIngredients = allIngredients.reduce((acc, ing) => {
+      if (!acc.some(i => i.name === ing.name)) {
+        acc.push(ing);
+      }
+      return acc;
+    }, [] as Ingredient[]);
+    
+    return uniqueIngredients;
+  };
+
+  const getFilteredIngredientsForCart = (): Ingredient[] => {
+    if (!plate) return [];
+    
+    // Get all ingredients (same as getCurrentIngredients)
+    let allIngredients = [...plate.baseIngredients];
+    
+    Object.entries(selectedOptions).forEach(([sectionId, optionIds]) => {
+      const section = plate.sections.find(s => s.id === sectionId);
+      if (section?.ingredientDependent) {
+        optionIds.forEach(optionId => {
+          const option = section.options.find(o => o.id === optionId);
+          if (option?.ingredients) {
+            allIngredients = [...allIngredients, ...option.ingredients];
+          }
+        });
+      }
+    });
+    
+    // Remove duplicates
+    const uniqueIngredients = allIngredients.reduce((acc, ing) => {
+      if (!acc.some(i => i.name === ing.name)) {
+        acc.push(ing);
+      }
+      return acc;
+    }, [] as Ingredient[]);
+    
+    // Filter out removed ingredients (but keep obligatory ones)
+    return uniqueIngredients.filter(ing => 
+      ing.obligatory || !removedIngredients.has(ing.name)
+    );
+  };
+
+  const handleOpenNotesModal = () => {
+    setModalNotes(notes);
+    setShowNotesModal(true);
+  };
+
+  const handleSaveNotes = () => {
+    setNotes(modalNotes);
+    setShowNotesModal(false);
+  };
+
+  const handleCancelNotes = () => {
+    setShowNotesModal(false);
   };
 
   const handleAddToOrder = async () => {
-    // Check if user is logged in
     if (!user) {
       Alert.alert(
         'Login Required',
@@ -199,7 +273,6 @@ export default function PlateDetailScreen() {
       return;
     }
 
-    // Check if user is a customer
     if (user.userType !== 'customer') {
       Alert.alert(
         'Account Type Error',
@@ -219,7 +292,6 @@ export default function PlateDetailScreen() {
       return;
     }
     
-    // Validate required sections
     for (const section of plate.sections) {
       if (section.required && (!selectedOptions[section.id] || selectedOptions[section.id].length === 0)) {
         Alert.alert('Required Option', `Please select an option for "${section.name}"`);
@@ -230,7 +302,6 @@ export default function PlateDetailScreen() {
     setAddingToCart(true);
     
     try {
-      // Calculate the price
       const selectedOptionArray = Object.entries(selectedOptions).flatMap(([sectionId, optionIds]) =>
         optionIds.map(optionId => ({ sectionId, optionId }))
       );
@@ -247,49 +318,43 @@ export default function PlateDetailScreen() {
       
       const customizedPlate = priceResult.data;
       
-      // Prepare cart item data
-      const cartItem = {
-        menuId,
-        plateId: plate.id,
-        plateName: plate.name,
-        restaurantId,
-        restaurantName,
-        price: customizedPlate.finalPrice / quantity, // Price per item
-        quantity,
-        selectedOptions: getSelectedOptionDetails(),
-        variantId: customizedPlate.variantId,
-        customIngredients: customizedPlate.customIngredients || getCustomIngredients(),
-        imageUrl: plate.imageUrl
-      };
+      // Use the filtered ingredients for cart
+      const filteredIngredients = getFilteredIngredientsForCart();
       
-      // Add to cart
       const result = await addToCart(
         menuId,
         plate.id,
         plate.name,
         restaurantId,
         restaurantName,
-        customizedPlate.finalPrice / quantity, // Price per item
+        customizedPlate.finalPrice / quantity,
         quantity,
         getSelectedOptionDetails(),
         customizedPlate.variantId,
-        customizedPlate.customIngredients || getCustomIngredients(),
-        plate.imageUrl
+        filteredIngredients, 
+        plate.imageUrl,
+        notes.trim()
       );
       
       if (result) {
         Alert.alert(
           'Added to Cart',
-          `${quantity}x "${plate.name}" added to your cart`,
+          `${quantity}x "${plate.name}" added to your cart${notes ? ' with notes' : ''}`,
           [
             {
               text: 'Continue Shopping',
               style: 'cancel',
-              onPress: () => router.back()
+              onPress: () => {
+                setNotes('');
+                router.back();
+              }
             },
             {
               text: 'Go to Cart',
-              onPress: () => router.push('/Cart')
+              onPress: () => {
+                setNotes('');
+                router.push('/Cart');
+              }
             }
           ]
         );
@@ -297,14 +362,119 @@ export default function PlateDetailScreen() {
       
     } catch (error) {
       console.error('Error adding to cart:', error);
-      Alert.alert(
-        'Error',
-        error instanceof Error ? error.message : 'Failed to add item to cart'
-      );
+      
+      // Check if it's a restaurant mismatch error
+      const errorMessage = error instanceof Error ? error.message : 'Failed to add item to cart';
+      
+      if (errorMessage.includes('Your cart contains items from')) {
+        // Extract restaurant names from error message
+        const match = errorMessage.match(/Your cart contains items from (.*?)\. Please checkout or clear cart before adding items from (.*)/);
+        
+        if (match) {
+          const currentRestaurant = match[1];
+          const newRestaurant = match[2] || restaurantName;
+          
+          Alert.alert(
+            'Different Restaurant',
+            `Your cart contains items from "${currentRestaurant}".\n\nYou're trying to add an item from "${newRestaurant}".\n\nWould you like to:`,
+            [
+              {
+                text: 'Keep Current Cart',
+                style: 'cancel',
+                onPress: () => {
+                  // Option 1: Keep current cart, go to cart screen
+                  router.push('/Cart');
+                }
+              },
+              {
+                text: 'View Current Cart',
+                onPress: () => {
+                  router.push('/Cart');
+                }
+              },
+              {
+                text: 'Clear & Add New Item',
+                style: 'destructive',
+                onPress: async () => {
+                  // Option 3: Clear cart and add new item
+                  try {
+                    setAddingToCart(true);
+                    
+                    // Calculate price again (in case it wasn't calculated before error)
+                    const selectedOptionArray = Object.entries(selectedOptions).flatMap(([sectionId, optionIds]) =>
+                      optionIds.map(optionId => ({ sectionId, optionId }))
+                    );
+                    
+                    const priceResult = await menuApi.calculateCustomizedPlate(
+                      menuId,
+                      plateId!,
+                      selectedOptionArray
+                    );
+                    
+                    if (!priceResult.success || !priceResult.data) {
+                      throw new Error(priceResult.error || 'Failed to calculate price');
+                    }
+                    
+                    const customizedPlate = priceResult.data;
+                    const filteredIngredients = getFilteredIngredientsForCart();
+                    
+                    // Store the item data to add after clearing
+                    const itemToAdd = {
+                      menuId,
+                      plateId: plate.id,
+                      plateName: plate.name,
+                      restaurantId,
+                      restaurantName,
+                      price: customizedPlate.finalPrice / quantity,
+                      quantity,
+                      selectedOptions: getSelectedOptionDetails(),
+                      variantId: customizedPlate.variantId,
+                      customIngredients: filteredIngredients,
+                      imageUrl: plate.imageUrl,
+                      notes: notes.trim()
+                    };
+                    
+                    // Navigate to cart with instructions to clear and add this item
+                    router.push({
+                      pathname: '/Cart',
+                      params: { 
+                        clearAndAddItem: 'true',
+                        itemData: JSON.stringify(itemToAdd)
+                      }
+                    });
+                    
+                  } catch (navError) {
+                    console.error('Error preparing to clear cart:', navError);
+                    Alert.alert('Error', 'Failed to prepare item for adding. Please try again.');
+                    setAddingToCart(false);
+                  }
+                }
+              }
+            ]
+          );
+        } else {
+          // Fallback if regex doesn't match
+          Alert.alert(
+            'Different Restaurant',
+            errorMessage + '\n\nPlease checkout or clear your cart first.',
+            [
+              { 
+                text: 'Go to Cart', 
+                onPress: () => router.push('/Cart') 
+              },
+              { text: 'OK', style: 'default' }
+            ]
+          );
+        }
+      } else {
+        // Other errors
+        Alert.alert('Error', errorMessage);
+      }
     } finally {
       setAddingToCart(false);
     }
   };
+
 
   if (loading) {
     return (
@@ -329,10 +499,11 @@ export default function PlateDetailScreen() {
     );
   }
 
+  const currentIngredients = getCurrentIngredients();
+
   return (
     <View style={styles.container}>
       <ScrollView style={styles.scrollView} contentContainerStyle={styles.scrollContent}>
-        {/* Plate Image with Overlay Text */}
         <View style={styles.imageContainer}>
           {plate.imageUrl ? (
             <Image 
@@ -346,7 +517,6 @@ export default function PlateDetailScreen() {
             </View>
           )}
           
-          {/* Gradient Overlay */}
           <LinearGradient
             colors={['transparent', 'rgba(0,0,0,0.3)', 'rgba(0,0,0,0.7)']}
             style={styles.gradientOverlay}
@@ -354,17 +524,13 @@ export default function PlateDetailScreen() {
             end={{ x: 0, y: 1 }}
           />
           
-          {/* Text Overlay */}
           <View style={styles.textOverlay}>
             <Text style={styles.plateNameOverlay}>{plate.name}</Text>
             <Text style={styles.plateDescriptionOverlay}>{plate.description}</Text>
           </View>
         </View>
         
-        {/* Plate Info */}
         <View style={styles.content}>
-          
-          {/* Customizable Sections */}
           {plate.sections.map(section => (
             <View key={section.id} style={styles.section}>
               <Text style={styles.sectionTitle}>
@@ -411,7 +577,7 @@ export default function PlateDetailScreen() {
                         
                         {section.ingredientDependent && option.ingredients && option.ingredients.length > 0 && (
                           <Text style={styles.optionIngredients}>
-                            Adds: {option.ingredients.join(', ')}
+                            Adds: {option.ingredients.map(ing => ing.name).join(', ')}
                           </Text>
                         )}
                       </View>
@@ -422,34 +588,67 @@ export default function PlateDetailScreen() {
             </View>
           ))}
 
-          {/* Base Ingredients as Toggle Buttons */}
           <View style={styles.section}>
             <Text style={styles.sectionTitle}>Ingredients</Text>
-            <Text style={styles.ingredientsSubtitle}>Tap to remove ingredients</Text>
+            <Text style={styles.ingredientsSubtitle}>
+              Tap to remove ingredients. <Text style={styles.mandatoryNote}>Red items cannot be removed.</Text>
+            </Text>
             <View style={styles.ingredientsContainer}>
-              {plate.baseIngredients.map((ingredient, index) => {
-                const isSelected = selectedIngredients.includes(index);
+              {getCurrentIngredients().map((ingredient, index) => {
+                const isRemoved = removedIngredients.has(ingredient.name);
+                const isMandatory = ingredient.obligatory;
                 
                 return (
                   <TouchableOpacity
-                    key={index}
+                    key={`${ingredient.name}-${index}`}
                     style={[
                       styles.ingredientButton,
-                      isSelected ? styles.ingredientButtonSelected : styles.ingredientButtonDefault
+                      isMandatory && styles.ingredientButtonMandatory,
+                      isRemoved && !isMandatory && styles.ingredientButtonRemoved
                     ]}
-                    onPress={() => toggleIngredient(index)}
+                    onPress={() => toggleIngredient(ingredient.name, isMandatory)}
+                    activeOpacity={isMandatory ? 1 : 0.7}
+                    disabled={isMandatory}
                   >
                     <Text style={[
                       styles.ingredientButtonText,
-                      isSelected ? styles.ingredientButtonTextSelected : styles.ingredientButtonTextDefault
+                      isMandatory && styles.ingredientButtonTextMandatory,
+                      isRemoved && !isMandatory && styles.ingredientButtonTextRemoved
                     ]}>
-                      {ingredient}
+                      {ingredient.name}
+                      {isRemoved && !isMandatory}
                     </Text>
                   </TouchableOpacity>
                 );
               })}
             </View>
           </View>
+
+          {/* Comments/Notes Section */}
+          <View style={styles.notesSection}>
+            <Text style={styles.sectionTitle}>Comments</Text>
+            <Text style={styles.notesSubtitle}>Add any special requests or notes for this item</Text>
+            
+            {/* Notes Preview Button */}
+            <TouchableOpacity 
+              style={styles.notesPreviewButton}
+              onPress={handleOpenNotesModal}
+            >
+              <Text style={[
+                styles.notesPreviewText,
+                !notes && styles.notesPreviewPlaceholder
+              ]}>
+                {notes || "E.g., Extra spicy, lactose free, separate sauce..."}
+              </Text>
+            </TouchableOpacity>
+            
+            {notes ? (
+              <Text style={styles.notesCharCount}>
+                {notes.length}/500 characters
+              </Text>
+            ) : null}
+          </View>
+
           <View style={styles.priceContainer}>
             <Text style={styles.totalPriceLabel}>Total:</Text>
             <Text style={styles.totalPriceValue}>${calculateTotalPrice().toFixed(2)}</Text>
@@ -457,7 +656,6 @@ export default function PlateDetailScreen() {
         </View>
       </ScrollView>
       
-      {/* Fixed Bottom Add to Cart Section */}
       <View style={styles.footerContainer}>
         <View style={styles.quantityContainer}>
           <TouchableOpacity 
@@ -497,6 +695,66 @@ export default function PlateDetailScreen() {
           )}
         </TouchableOpacity>
       </View>
+
+      {/* Notes Modal */}
+      <Modal
+        visible={showNotesModal}
+        animationType="slide"
+        transparent={true}
+        onRequestClose={handleCancelNotes}
+      >
+        <KeyboardAvoidingView 
+          style={styles.modalOverlay}
+          behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+          keyboardVerticalOffset={Platform.OS === 'ios' ? 0 : 20}
+        >
+          <TouchableOpacity 
+            style={styles.modalBackground}
+            activeOpacity={1}
+            onPress={handleCancelNotes}
+          />
+          
+          <View style={styles.modalContent}>
+            <View style={styles.modalHeader}>
+              <Text style={styles.modalTitle}>Special Instructions</Text>
+              <Text style={styles.modalSubtitle}>Add any special requests or notes for this item</Text>
+            </View>
+            
+            <TextInput
+              style={styles.modalTextInput}
+              placeholder="E.g., Extra spicy, lactose free, separate sauce..."
+              placeholderTextColor={colors.second}
+              multiline
+              numberOfLines={6}
+              maxLength={500}
+              value={modalNotes}
+              onChangeText={setModalNotes}
+              autoFocus={true}
+              textAlignVertical="top"
+            />
+            
+            <Text style={styles.modalCharCount}>
+              {modalNotes.length}/500 characters
+            </Text>
+            
+            <View style={styles.modalButtons}>
+              <TouchableOpacity 
+                style={styles.modalCancelButton}
+                onPress={handleCancelNotes}
+              >
+                <Text style={styles.modalCancelButtonText}>Cancel</Text>
+              </TouchableOpacity>
+              
+              <TouchableOpacity 
+                style={styles.modalSaveButton}
+                onPress={handleSaveNotes}
+              >
+                <Text style={styles.modalSaveButtonText}>Save</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </KeyboardAvoidingView>
+      </Modal>
     </View>
   );
 }
@@ -519,12 +777,12 @@ const createStyles = (colors: any) => StyleSheet.create({
   },
   errorText: {
     fontSize: 18,
-    color: colors.error,
+    color: '#DC2626',
     marginBottom: 20,
     textAlign: 'center',
   },
   retryButton: {
-    backgroundColor: colors.primary,
+    backgroundColor: colors.tint,
     paddingHorizontal: 24,
     paddingVertical: 12,
     borderRadius: 8,
@@ -538,7 +796,7 @@ const createStyles = (colors: any) => StyleSheet.create({
     flex: 1,
   },
   scrollContent: {
-    paddingBottom: 120, // Space for fixed footer
+    paddingBottom: 120,
   },
   imageContainer: {
     position: 'relative',
@@ -594,6 +852,9 @@ const createStyles = (colors: any) => StyleSheet.create({
   section: {
     marginBottom: 30,
   },
+  notesSection: {
+    marginBottom: 20,
+  },
   sectionTitle: {
     fontSize: 25,
     fontWeight: '600',
@@ -606,15 +867,48 @@ const createStyles = (colors: any) => StyleSheet.create({
     marginBottom: 12,
     fontStyle: 'italic',
   },
+  mandatoryNote: {
+    color: '#DC2626',
+    fontWeight: '600',
+  },
+  notesSubtitle: {
+    fontSize: 14,
+    color: colors.secondaryText,
+    marginBottom: 12,
+    fontStyle: 'italic',
+  },
   required: {
-    color: colors.error,
+    color: '#DC2626',
   },
   multipleNote: {
     fontSize: 14,
     color: colors.secondaryText,
     fontStyle: 'italic',
   },
-
+  notesPreviewButton: {
+    backgroundColor: colors.third,
+    padding: 16,
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'flex-start',
+    minHeight: 150,
+  },
+  notesPreviewText: {
+    fontSize: 15,
+    color: colors.text,
+    flex: 1,
+    marginRight: 12,
+  },
+  notesPreviewPlaceholder: {
+    color: colors.second,
+    fontStyle: 'italic',
+  },
+  notesCharCount: {
+    fontSize: 12,
+    color: colors.secondaryText,
+    textAlign: 'right',
+    marginTop: 8,
+  },
   ingredientsContainer: {
     flexDirection: 'row',
     flexWrap: 'wrap',
@@ -625,26 +919,36 @@ const createStyles = (colors: any) => StyleSheet.create({
     paddingVertical: 10,
     borderRadius: 20,
     borderWidth: 1,
+    backgroundColor: colors.defaultColor,
   },
-  ingredientButtonDefault: {
-    backgroundColor: '#000000',
-    borderColor: colors.border,
+  ingredientButtonMandatory: {
+    backgroundColor: '#7F1D1D',
+    borderColor: '#DC2626',
+    borderWidth: 2,
+  },
+  ingredientButtonRemoved: {
+    backgroundColor: colors.second,
+    borderColor: colors.second,
+  },
+  ingredientButtonText: {
+    fontSize: 14,
+    fontWeight: '500',
+    color: colors.background,
+  },
+  ingredientButtonTextMandatory: {
+    color: '#FCA5A5',
+    fontWeight: '600',
+  },
+  ingredientButtonTextRemoved: {
+    color: colors.defaultColor,
   },
   ingredientButtonSelected: {
     backgroundColor: colors.second,
     borderColor: 'transparent',
   },
-  ingredientButtonText: {
-    fontSize: 14,
-    fontWeight: '500',
-  },
-  ingredientButtonTextDefault: {
-    color: 'white',
-  },
   ingredientButtonTextSelected: {
-    color: colors.defaultColor || 'white',
+    color: colors.defaultColor,
   },
-  // Options as checkbox list
   optionsList: {
     gap: 5,
   },
@@ -653,8 +957,6 @@ const createStyles = (colors: any) => StyleSheet.create({
     alignItems: 'center',
   },
   optionItemSelected: {
-    backgroundColor: colors.primary + '20', // 20% opacity
-    borderColor: colors.primary,
   },
   optionInfo: {
     flex: 1,
@@ -674,12 +976,11 @@ const createStyles = (colors: any) => StyleSheet.create({
     marginRight: 10,
   },
   optionNameSelected: {
-    color: colors.primary,
-    fontWeight: '600',
+    fontWeight: '700',
   },
   optionPrice: {
     fontSize: 16,
-    color: colors.success,
+    color: colors.defaultColor,
     fontWeight: '600',
   },
   optionIngredients: {
@@ -687,7 +988,7 @@ const createStyles = (colors: any) => StyleSheet.create({
     color: colors.secondaryText,
     fontStyle: 'italic',
   },
-  // Fixed footer styles
+
   footerContainer: {
     position: 'absolute',
     bottom: 0,
@@ -740,21 +1041,20 @@ const createStyles = (colors: any) => StyleSheet.create({
     textAlign: 'center',
   },
   priceContainer: {
-    flex: 1,
-    marginRight: 16,
     flexDirection: 'row',
-    alignItems: 'center'
+    alignItems: 'center',
+    marginTop: 20,
   },
   totalPriceLabel: {
     fontSize: 30,
-    fontWeight:700,
+    fontWeight: '700',
     color: colors.secondaryText,
     marginBottom: 2,
   },
   totalPriceValue: {
     fontSize: 30,
     fontWeight: 'bold',
-    color: colors.primary,
+    color: colors.defaultColor,
     marginLeft: 10,
   },
   addToCartButton: {
@@ -772,5 +1072,83 @@ const createStyles = (colors: any) => StyleSheet.create({
     color: 'white',
     fontSize: 16,
     fontWeight: 'bold',
+  },
+  modalOverlay: {
+    flex: 1,
+    justifyContent: 'flex-end',
+  },
+  modalBackground: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+  },
+  modalContent: {
+    backgroundColor: colors.background,
+    borderTopLeftRadius: 20,
+    borderTopRightRadius: 20,
+    padding: 20,
+    paddingBottom: Platform.OS === 'ios' ? 40 : 20,
+    maxHeight: '80%',
+  },
+  modalHeader: {
+    marginBottom: 20,
+  },
+  modalTitle: {
+    fontSize: 22,
+    fontWeight: 'bold',
+    color: colors.text,
+    marginBottom: 8,
+  },
+  modalSubtitle: {
+    fontSize: 14,
+    color: colors.secondaryText,
+  },
+  modalTextInput: {
+    backgroundColor: colors.third,
+    padding: 16,
+    fontSize: 16,
+    color: colors.text,
+    minHeight: 150,
+    textAlignVertical: 'top',
+  },
+  modalCharCount: {
+    fontSize: 12,
+    color: colors.secondaryText,
+    textAlign: 'right',
+    marginTop: 8,
+    marginBottom: 20,
+  },
+  modalButtons: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    gap: 12,
+  },
+  modalCancelButton: {
+    flex: 1,
+    paddingVertical: 16,
+    alignItems: 'center',
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: colors.border,
+  },
+  modalCancelButtonText: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: colors.secondaryText,
+  },
+  modalSaveButton: {
+    flex: 1,
+    paddingVertical: 16,
+    alignItems: 'center',
+    borderRadius: 12,
+    backgroundColor: colors.defaultColor,
+  },
+  modalSaveButtonText: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: colors.background,
   },
 });

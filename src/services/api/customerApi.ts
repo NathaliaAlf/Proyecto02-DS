@@ -402,6 +402,10 @@ export const customerApi = {
     try {
       const cartsRef = collection(db, 'shoppingCarts');
       const now = new Date().toISOString();
+
+      const sanitizedCartItem = Object.fromEntries(
+        Object.entries(cartItem).filter(([_, value]) => value !== undefined)
+      );
       
       return await runTransaction(db, async (transaction) => {
         // Get active cart
@@ -437,21 +441,22 @@ export const customerApi = {
             // Update quantity
             cartData.items[existingItemIndex].quantity += cartItem.quantity;
           } else {
-            // Add new item with all required fields (no undefined)
+            // Add new item with all required fields 
             const newItem: CartItem = {
               id: generateCartItemId(),
               plateId: cartItem.plateId || '',
               plateName: cartItem.plateName || '',
               menuId: cartItem.menuId || '',
-              variantId: cartItem.variantId || null, // Use null instead of undefined
-              customIngredients: cartItem.customIngredients || [], // Default to empty array
-              selectedOptions: cartItem.selectedOptions || [], // Default to empty array
+              variantId: cartItem.variantId || null, 
+              customIngredients: cartItem.customIngredients || [], 
+              selectedOptions: cartItem.selectedOptions || [], 
               quantity: cartItem.quantity || 1,
               price: cartItem.price || 0,
-              imageUrl: cartItem.imageUrl || null, // Use null instead of undefined
+              imageUrl: cartItem.imageUrl || null, 
               restaurantId: cartItem.restaurantId || '',
               restaurantName: cartItem.restaurantName || '',
-              addedAt: now
+              addedAt: now,
+              notes: cartItem.notes || ''
             };
             cartData.items.push(newItem);
           }
@@ -575,27 +580,44 @@ export const customerApi = {
           // Update quantity
           items[itemIndex].quantity = quantity;
         }
-        
-        transaction.update(cartRef, {
-          items,
-          updatedAt: new Date().toISOString()
-        });
-        
-        // Calculate totals
+
+        // Calculate new totals
         const subtotal = items.reduce((sum: number, item: CartItem) => 
           sum + (item.price * item.quantity), 0);
+        const totalItems = items.reduce((sum: number, item: CartItem) => sum + item.quantity, 0);
+        const total = subtotal + (cartData.deliveryFee || 0) + (cartData.tax || 0);
+
+        // Prepare update data
+        const updateData: any = {
+          items,
+          subtotal,
+          totalItems,
+          total,
+          updatedAt: new Date().toISOString()
+        };
+
+        // Check if cart is now empty
+        if (items.length === 0) {
+          updateData.restaurantId = '';
+          updateData.restaurantName = '';
+          updateData.subtotal = 0;
+          updateData.totalItems = 0;
+          updateData.total = 0;
+        }
+        
+        transaction.update(cartRef, updateData);
         
         const cart: ShoppingCart = {
           id: cartSnap.id,
           customerId: cartData.customerId,
-          restaurantId: cartData.restaurantId,
-          restaurantName: cartData.restaurantName,
+          restaurantId: items.length === 0 ? '' : cartData.restaurantId,
+          restaurantName: items.length === 0 ? '' : cartData.restaurantName,
           items,
-          totalItems: items.reduce((sum: number, item: CartItem) => sum + item.quantity, 0),
+          totalItems,
           subtotal,
           deliveryFee: cartData.deliveryFee || 0,
           tax: cartData.tax || 0,
-          total: subtotal + (cartData.deliveryFee || 0) + (cartData.tax || 0),
+          total,
           createdAt: cartData.createdAt,
           updatedAt: cartData.updatedAt
         };
@@ -636,6 +658,9 @@ export const customerApi = {
         items: [],
         restaurantId: '',
         restaurantName: '',
+        subtotal: 0,
+        totalItems: 0,
+        total: 0,
         updatedAt: new Date().toISOString()
       });
       
