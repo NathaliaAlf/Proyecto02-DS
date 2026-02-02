@@ -1,12 +1,12 @@
-// (customer)/_layout.tsx - This is the main customer layout
+// (customer)/_layout.tsx 
+import SearchBar from '@/components/SearchBar';
 import { useAuth } from '@/context/AuthContext';
 import { useTheme } from '@/context/ThemeContext';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import AntDesign from '@expo/vector-icons/AntDesign';
-import EvilIcons from '@expo/vector-icons/EvilIcons';
 import Feather from '@expo/vector-icons/Feather';
 import Ionicons from '@expo/vector-icons/Ionicons';
-import { router, Stack } from 'expo-router';
+import { router, Stack, usePathname } from 'expo-router';
 import { useRef, useState } from 'react';
 import {
     Animated,
@@ -17,19 +17,25 @@ import {
     StatusBar,
     StyleSheet,
     Text,
-    TextInput,
     TouchableOpacity,
     TouchableWithoutFeedback,
     View
 } from 'react-native';
 
 export default function CustomerLayout() {
+    const pathname = usePathname();
     const {user, logout} = useAuth();
     const {colors} = useTheme();
     const [isMenuOpen, setIsMenuOpen] = useState(false);
+    const [searchQuery, setSearchQuery] = useState('');
     const slideAnim = useRef(new Animated.Value(-300)).current;
     const fadeAnim = useRef(new Animated.Value(0)).current;
     const styles = createStyles(colors);
+    const isInRestaurantMenu = pathname.startsWith('/(customer)/restaurants/');
+    const pathParts = pathname.split('/').filter(Boolean);
+    const restaurantIdMatch = pathname.match(/\/restaurants\/[^\/]+\/([^\/]+)/);
+    const restaurantId = restaurantIdMatch ? restaurantIdMatch[1] : null;
+    const categoryId = pathParts[2] || null;
 
     interface MenuItem {
         id: number;
@@ -91,7 +97,38 @@ export default function CustomerLayout() {
         }
     };
 
-    // Function to navigate to cart screen
+    // Determine search mode
+    const getSearchMode = () => {
+        return restaurantId ? 'plates' : 'restaurants';
+    };
+
+    const getSearchPlaceholder = () => {
+        if (restaurantId) {
+            return 'Search in menu...';
+        } else if (isInRestaurantMenu) {
+            return 'Search restaurants...';
+        } else {
+            return 'Search...';
+        }
+    };
+
+    const handleSearch = (text: string) => {
+        setSearchQuery(text);
+        // Here you would implement the search logic based on context
+        if (restaurantId) {
+            // Search plates in this restaurant's menu
+            console.log(`Searching plates in restaurant ${restaurantId}: ${text}`);
+            // You could emit an event, update context, or call a function here
+        } else if (isInRestaurantMenu) {
+            // Search restaurants in current category
+            console.log(`Searching restaurants: ${text}`);
+        } else {
+            // General search (all restaurants)
+            console.log(`General search: ${text}`);
+        }
+    };
+
+
     const goToCart = () => {
         router.push('/Cart'); // Navigate to Cart screen
     };
@@ -104,16 +141,13 @@ export default function CustomerLayout() {
                 headerShadowVisible: false,
                 headerTitleAlign: 'center',
                 headerTitle: ({children}) => (
-                    <View>
-                        <View style={styles.searchBarContainer}>
-                            <TextInput 
-                                style={styles.searchInput}
-                                placeholder='Search'
-                                placeholderTextColor={colors.second}
-                                underlineColorAndroid={'transparent'}
-                            />
-                            <EvilIcons name="search" style={styles.icon} />
-                        </View>
+                    <View style={styles.searchContainer}>
+                        <SearchBar
+                        placeholder={getSearchPlaceholder()}
+                        searchMode={getSearchMode()}
+                        restaurantId={restaurantId || undefined}
+                        categoryId={categoryId || undefined}
+                        />
                     </View>
                 ),
                 headerLeft: () => (
@@ -314,15 +348,10 @@ const createStyles = (colors: any) => StyleSheet.create({
     headerTitleContainer: {
         backgroundColor: colors.headerBackground,
     },
-    searchBarContainer: {
-        flexDirection: 'row',
-        backgroundColor: colors.headerBackground,
-        width: 220,
-        height: 40,
+    searchContainer: {
+        flex: 1,
+        width: '100%',
         alignItems: 'center',
-        paddingHorizontal: 12,
-        borderWidth: 2,
-        borderRadius: 20,
     },
     searchInput: {
         flex: 1,
