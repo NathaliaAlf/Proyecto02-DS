@@ -76,7 +76,38 @@ export interface CartItem {
   restaurantId: string;
   restaurantName: string;
   addedAt: string;
-  notes?: string; 
+  notes?: string;
+  
+  plateDetails?: {
+    // Original plate data
+    basePrice: number;
+    description: string;
+    baseIngredients: Ingredient[];
+    sections: Array<{
+      id: string;
+      name: string;
+      required: boolean;
+      multiple: boolean;
+      ingredientDependent: boolean;
+      options: Array<{
+        id: string;
+        name: string;
+        additionalCost: number;
+        ingredients?: Ingredient[];
+      }>;
+    }>;
+    
+    // User's customization state
+    customizationState: {
+      removedIngredients: string[]; // Array of ingredient names that were removed
+      selectedOptions: Record<string, string[]>; // sectionId -> optionIds[]
+      quantity: number;
+      notes: string;
+    };
+    
+    // Current ingredients after customization
+    currentIngredients: Ingredient[];
+  };
 }
 
 export interface SelectedOption {

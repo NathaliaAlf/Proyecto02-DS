@@ -1,12 +1,11 @@
-// (customer)/_layout.tsx - This is the main customer layout
+// (customer)/_layout.tsx 
+import SearchBar from '@/components/SearchBar';
 import { useAuth } from '@/context/AuthContext';
 import { useTheme } from '@/context/ThemeContext';
-import { MaterialCommunityIcons } from '@expo/vector-icons';
 import AntDesign from '@expo/vector-icons/AntDesign';
-import EvilIcons from '@expo/vector-icons/EvilIcons';
 import Feather from '@expo/vector-icons/Feather';
 import Ionicons from '@expo/vector-icons/Ionicons';
-import { router, Stack } from 'expo-router';
+import { router, Stack, usePathname } from 'expo-router';
 import { useRef, useState } from 'react';
 import {
     Animated,
@@ -17,30 +16,37 @@ import {
     StatusBar,
     StyleSheet,
     Text,
-    TextInput,
     TouchableOpacity,
     TouchableWithoutFeedback,
     View
 } from 'react-native';
 
 export default function CustomerLayout() {
+    const pathname = usePathname();
     const {user, logout} = useAuth();
     const {colors} = useTheme();
     const [isMenuOpen, setIsMenuOpen] = useState(false);
+    const [searchQuery, setSearchQuery] = useState('');
     const slideAnim = useRef(new Animated.Value(-300)).current;
     const fadeAnim = useRef(new Animated.Value(0)).current;
     const styles = createStyles(colors);
+    const isInRestaurantMenu = pathname.startsWith('/(customer)/restaurants/');
+    const pathParts = pathname.split('/').filter(Boolean);
+    const restaurantIdMatch = pathname.match(/\/restaurants\/[^\/]+\/([^\/]+)/);
+    const restaurantId = restaurantIdMatch ? restaurantIdMatch[1] : null;
+    const categoryId = pathParts[2] || null;
 
     interface MenuItem {
         id: number;
         icon: any;
         name: string;
         iconLib: React.ComponentType<any>;
+        path: any; // Use 'any' to avoid TypeScript errors
     }
 
     const menuItems: MenuItem[] = [
-        { id: 1, icon: 'food-apple-outline', name: 'Food Preferences', iconLib: MaterialCommunityIcons },
-        { id: 2, icon: 'crown-outline', name: 'Subscriptions', iconLib: MaterialCommunityIcons },
+        { id: 1, icon: 'wallet-outline', name: 'Wallet', iconLib: Ionicons, path: '/(customer)/wallet' },
+        { id: 2, icon: 'star-outline', name: 'Subscriptions', iconLib: Ionicons, path: '/(customer)/subscriptions' },
     ];
 
     const handleLogout = async () => {
@@ -91,9 +97,44 @@ export default function CustomerLayout() {
         }
     };
 
-    // Function to navigate to cart screen
+    // Determine search mode
+    const getSearchMode = () => {
+        return restaurantId ? 'plates' : 'restaurants';
+    };
+
+    const getSearchPlaceholder = () => {
+        if (restaurantId) {
+            return 'Search in menu...';
+        } else if (isInRestaurantMenu) {
+            return 'Search restaurants...';
+        } else {
+            return 'Search...';
+        }
+    };
+
+    const handleSearch = (text: string) => {
+        setSearchQuery(text);
+        // Here you would implement the search logic based on context
+        if (restaurantId) {
+            // Search plates in this restaurant's menu
+            console.log(`Searching plates in restaurant ${restaurantId}: ${text}`);
+            // You could emit an event, update context, or call a function here
+        } else if (isInRestaurantMenu) {
+            // Search restaurants in current category
+            console.log(`Searching restaurants: ${text}`);
+        } else {
+            // General search (all restaurants)
+            console.log(`General search: ${text}`);
+        }
+    };
+
+    const handleMenuItemPress = (path: any) => {
+        closeMenu();
+        router.push(path);
+    };
+
     const goToCart = () => {
-        router.push('/Cart'); // Navigate to Cart screen
+        router.push('/(customer)/Cart'); // Updated path
     };
 
     return (
@@ -104,16 +145,13 @@ export default function CustomerLayout() {
                 headerShadowVisible: false,
                 headerTitleAlign: 'center',
                 headerTitle: ({children}) => (
-                    <View>
-                        <View style={styles.searchBarContainer}>
-                            <TextInput 
-                                style={styles.searchInput}
-                                placeholder='Search'
-                                placeholderTextColor={colors.second}
-                                underlineColorAndroid={'transparent'}
-                            />
-                            <EvilIcons name="search" style={styles.icon} />
-                        </View>
+                    <View style={styles.searchContainer}>
+                        <SearchBar
+                        placeholder={getSearchPlaceholder()}
+                        searchMode={getSearchMode()}
+                        restaurantId={restaurantId || undefined}
+                        categoryId={categoryId || undefined}
+                        />
                     </View>
                 ),
                 headerLeft: () => (
@@ -152,7 +190,7 @@ export default function CustomerLayout() {
                     }} 
                 />
                 
-                {/* Cart screen */}
+                {/* Cart screen - make sure this file exists at app/(customer)/Cart.tsx */}
                 <Stack.Screen 
                     name="Cart" 
                     options={{ 
@@ -175,7 +213,7 @@ export default function CustomerLayout() {
                     }} 
                 />
                 
-                {/* Order History screen */}
+                {/* Order History screen - make sure this file exists at app/(customer)/OrderHistory.tsx */}
                 <Stack.Screen 
                     name="OrderHistory" 
                     options={{ 
@@ -184,7 +222,17 @@ export default function CustomerLayout() {
                         headerRight: () => null,
                     }} 
                 />
-                
+
+                {/* Subscriptions screens - these should be defined in a separate subscriptions folder */}
+                <Stack.Screen 
+                    name="subscriptions/index" 
+                    options={{ 
+                        title: "My Subscriptions",
+                        headerShown: true,
+                        headerRight: () => null,
+                    }} 
+                />
+
                 {/* Restaurants group - this will use its own layout */}
                 <Stack.Screen 
                     name="restaurants" 
@@ -192,6 +240,8 @@ export default function CustomerLayout() {
                         headerShown: false 
                     }} 
                 />
+
+                {/* You might need to add more screens here if they're not in sub-folders */}
             </Stack>
 
             {/* Overlay */}
@@ -250,13 +300,14 @@ export default function CustomerLayout() {
                             activeOpacity={0.7}
                             onPress={() => {
                                 closeMenu();
-                                router.push('/'); // Navigate to home
+                                router.push('/(customer)'); // Navigate to home
                             }}
                         >
                             <Ionicons name="home-outline" style={styles.menuItemIcon} />
                             <Text style={styles.menuItemText}>Home</Text>
                         </TouchableOpacity>
                         
+                        {/* Menu items from array */}
                         {menuItems.map((item) => {
                             const IconComponent = item.iconLib;
                             return (
@@ -264,10 +315,7 @@ export default function CustomerLayout() {
                                     key={item.id}
                                     style={styles.menuItem}
                                     activeOpacity={0.7}
-                                    onPress={() => {
-                                        console.log(`${item.name} pressed`);
-                                        closeMenu();
-                                    }}
+                                    onPress={() => handleMenuItemPress(item.path)}
                                 >
                                     <IconComponent
                                         name={item.icon}
@@ -284,10 +332,10 @@ export default function CustomerLayout() {
                             activeOpacity={0.7}
                             onPress={() => {
                                 closeMenu();
-                                goToCart(); // Navigate to cart
+                                router.push('/(customer)/Cart'); // Navigate to cart
                             }}
                         >
-                            <Feather name="shopping-cart" style={styles.menuItemIcon} />
+                            <Ionicons name="cart-outline" style={styles.menuItemIcon} />
                             <Text style={styles.menuItemText}>Cart</Text>
                         </TouchableOpacity>
                         
@@ -297,7 +345,7 @@ export default function CustomerLayout() {
                             activeOpacity={0.7}
                             onPress={() => {
                                 closeMenu();
-                                router.push('/OrderHistory'); // Navigate to order history
+                                router.push('/(customer)/OrderHistory'); // Navigate to order history
                             }}
                         >
                             <Ionicons name="receipt-outline" style={styles.menuItemIcon} />
@@ -314,15 +362,10 @@ const createStyles = (colors: any) => StyleSheet.create({
     headerTitleContainer: {
         backgroundColor: colors.headerBackground,
     },
-    searchBarContainer: {
-        flexDirection: 'row',
-        backgroundColor: colors.headerBackground,
-        width: 220,
-        height: 40,
+    searchContainer: {
+        flex: 1,
+        width: '100%',
         alignItems: 'center',
-        paddingHorizontal: 12,
-        borderWidth: 2,
-        borderRadius: 20,
     },
     searchInput: {
         flex: 1,

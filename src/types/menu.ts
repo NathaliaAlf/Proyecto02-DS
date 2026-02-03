@@ -1,9 +1,8 @@
 // types/menu.ts
 
-// Ingredient with obligatory flag
 export interface Ingredient {
   name: string;
-  obligatory: boolean; // If true, cannot be removed by customer
+  obligatory: boolean; 
 }
 
 export interface MenuSectionOption {
