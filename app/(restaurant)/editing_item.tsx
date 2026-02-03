@@ -1,7 +1,6 @@
 import { useAuth } from "@/context/AuthContext";
 import { useTheme } from "@/context/ThemeContext";
 import { menuApi } from '@/services/api/menuApi';
-import { normalizeIngredients } from "@/types/menu";
 import { Ionicons, MaterialIcons } from "@expo/vector-icons";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import React, { useEffect, useState } from 'react';
@@ -23,7 +22,7 @@ import {
 interface Option {
     id: string;
     name: string;
-    extraPrice: number;
+    extraPrice: number | string;
     description?: string;
 }
 
@@ -49,7 +48,7 @@ export interface Plate {
     active: boolean;
     baseIngredients: (string | IngredientObject)[];
     optionalIngredients: (string | IngredientObject)[];
-    section: Section[];
+    sections: Section[];
 }
 
 export default function EditingItemScreen() {
@@ -107,27 +106,19 @@ export default function EditingItemScreen() {
     const toggleIngredient = (ing: string | IngredientObject) => {
         if (!editPlate) return;
         
-        const ingName = getIngredientName(ing);
+        const name = getIngredientName(ing);
         let base = [...editPlate.baseIngredients];
         let opt = [...editPlate.optionalIngredients];
         
-        const baseIndex = base.findIndex(i => getIngredientName(i) === ingName);
-        
-        if (baseIndex !== -1) {
-            // Found in base, move to opt
-            const item = base[baseIndex];
-            base.splice(baseIndex, 1);
-            opt.push(item);
+        const isInBase = base.some(i => getIngredientName(i) === name);
+
+        if (isInBase) {
+            base = base.filter(i => getIngredientName(i) !== name);
+            opt.push(ing);
         } else {
-            const optIndex = opt.findIndex(i => getIngredientName(i) === ingName);
-            if (optIndex !== -1) {
-                // Found in opt, move to base
-                const item = opt[optIndex];
-                opt.splice(optIndex, 1);
-                base.push(item);
-            }
+            opt = opt.filter(i => getIngredientName(i) !== name);
+            base.push(ing);
         }
-        
         setEditPlate({ ...editPlate, baseIngredients: base, optionalIngredients: opt });
     };
 
@@ -135,11 +126,9 @@ export default function EditingItemScreen() {
         if (!newIng.trim() || !editPlate) return;
         const name = newIng.trim();
         
-        // Check if already exists in base or opt
         const existsInBase = editPlate.baseIngredients.some(i => getIngredientName(i) === name);
-        const existsInOpt = editPlate.optionalIngredients.some(i => getIngredientName(i) === name);
         
-        if (!existsInBase && !existsInOpt) {
+        if (!existsInBase) {
             setEditPlate({ ...editPlate, baseIngredients: [...editPlate.baseIngredients, name] });
         }
         setNewIng("");
@@ -158,8 +147,8 @@ export default function EditingItemScreen() {
             const plateToSave = {
                 ...editPlate,
                 basePrice: Number(editPlate.basePrice),
-                baseIngredients: normalizeIngredients(editPlate.baseIngredients),
-                section: editPlate.section?.map(sec => ({
+
+                sections: editPlate.sections?.map(sec => ({
                     ...sec,
                     options: sec.options.map(opt => ({
                         ...opt,
@@ -247,16 +236,16 @@ export default function EditingItemScreen() {
                         </View>
 
                         {/* SECCIONES (FLAVOR, SIZE, ETC) */}
-                        {editPlate.section?.map((sec, sIdx) => (
+                        {editPlate.sections?.map((sec, sIdx) => (
                             <View key={sec.id || sIdx} style={styles.sectionBlock}>
                                 <View style={styles.sectionTitleRow}>
                                     <TextInput
                                         style={styles.sectionNameInput}
                                         value={sec.name}
                                         onChangeText={(t) => {
-                                            const ns = [...editPlate.section];
+                                            const ns = [...editPlate.sections];
                                             ns[sIdx].name = t;
-                                            setEditPlate({...editPlate, section: ns});
+                                            setEditPlate({...editPlate, sections: ns});
                                         }}
                                     />
                                     <TouchableOpacity><Ionicons name="trash-outline" size={24} color="black" /></TouchableOpacity>
@@ -266,9 +255,9 @@ export default function EditingItemScreen() {
                                     placeholder="Describe what changes does this section"
                                     value={sec.description}
                                     onChangeText={(t) => {
-                                        const ns = [...editPlate.section];
+                                        const ns = [...editPlate.sections];
                                         ns[sIdx].description = t;
-                                        setEditPlate({...editPlate, section: ns});
+                                        setEditPlate({...editPlate, sections: ns});
                                     }}
                                 />
 
@@ -281,9 +270,9 @@ export default function EditingItemScreen() {
                                                     style={styles.optionNameInput}
                                                     value={opt.name}
                                                     onChangeText={(t) => {
-                                                        const ns = [...editPlate.section];
+                                                        const ns = [...editPlate.sections];
                                                         ns[sIdx].options[oIdx].name = t;
-                                                        setEditPlate({...editPlate, section: ns});
+                                                        setEditPlate({...editPlate, sections: ns});
                                                     }}
                                                 />
                                                 <View style={styles.priceBox}>
@@ -293,9 +282,9 @@ export default function EditingItemScreen() {
                                                         value={String(opt.extraPrice)}
                                                         keyboardType="numeric"
                                                         onChangeText={(t) => {
-                                                            const ns = [...editPlate.section];
+                                                            const ns = [...editPlate.sections];
                                                             ns[sIdx].options[oIdx].extraPrice = Number(t) || 0;
-                                                            setEditPlate({...editPlate, section: ns});
+                                                            setEditPlate({...editPlate, sections: ns});
                                                         }}
                                                     />
                                                 </View>
@@ -305,9 +294,9 @@ export default function EditingItemScreen() {
                                                 placeholder="Describe what changes does this option"
                                                 value={opt.description}
                                                 onChangeText={(t) => {
-                                                    const ns = [...editPlate.section];
+                                                    const ns = [...editPlate.sections];
                                                     ns[sIdx].options[oIdx].description = t;
-                                                    setEditPlate({...editPlate, section: ns});
+                                                    setEditPlate({...editPlate, sections: ns});
                                                 }}
                                             />
                                         </View>

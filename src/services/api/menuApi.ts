@@ -204,9 +204,9 @@ function normalizePlateData(plateData: any): Plate {
     description: plateData.description,
     basePrice: plateData.basePrice,
     baseIngredients: normalizeIngredients(plateData.baseIngredients || []),
-    imageUrl: plateData.imageUrl,
+    imageUrl: plateData.imageUrl || plateData.imageURL,
     active: plateData.active !== undefined ? plateData.active : true,
-    sections: (plateData.sections || []).map((section: any) => ({
+    sections: (plateData.sections || plateData.section || []).map((section: any) => ({
       ...section,
       options: (section.options || []).map((option: any) => ({
         ...option,

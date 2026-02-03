@@ -48,7 +48,7 @@ interface Plate {
     active: boolean;
     baseIngredients: (string | IngredientObject)[];
     optionalIngredients?: (string | IngredientObject)[];
-    section?: Section[];
+    sections?: Section[];
 }
 
 interface MenuData {
@@ -190,7 +190,7 @@ export default function RestaurantMenu() {
                             </View>
 
                             {/* SECCIONES DINÁMICAS (Flavor, etc) */}
-                            {selectedPlate.section?.map((sec, sIdx) => (
+                            {selectedPlate.sections?.map((sec, sIdx) => (
                                 <View key={sec.id || sIdx} style={{ marginBottom: 25 }}>
                                     <Text style={styles.sectionTitle}>{sec.name}</Text>
                                     {sec.options?.map((opt, oIdx) => {
