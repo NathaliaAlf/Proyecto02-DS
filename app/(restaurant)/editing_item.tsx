@@ -34,6 +34,11 @@ interface Section {
     options: Option[];
 }
 
+interface IngredientObject {
+    name: string;
+    obligatory?: boolean;
+}
+
 export interface Plate {
     id: string;
     name: string;
@@ -42,8 +47,8 @@ export interface Plate {
     imageUrl?: string;
     basePrice: number;
     active: boolean;
-    baseIngredients: string[];
-    optionalIngredients: string[];
+    baseIngredients: (string | IngredientObject)[];
+    optionalIngredients: (string | IngredientObject)[];
     section: Section[];
 }
 
@@ -95,24 +100,46 @@ export default function EditingItemScreen() {
     };
 
     // --- LÓGICA DE INGREDIENTES ---
-    const toggleIngredient = (name: string) => {
+    const getIngredientName = (ing: string | IngredientObject) => {
+        return typeof ing === 'string' ? ing : ing.name;
+    };
+
+    const toggleIngredient = (ing: string | IngredientObject) => {
         if (!editPlate) return;
+        
+        const ingName = getIngredientName(ing);
         let base = [...editPlate.baseIngredients];
         let opt = [...editPlate.optionalIngredients];
-        if (base.includes(name)) {
-            base = base.filter(i => i !== name);
-            opt.push(name);
+        
+        const baseIndex = base.findIndex(i => getIngredientName(i) === ingName);
+        
+        if (baseIndex !== -1) {
+            // Found in base, move to opt
+            const item = base[baseIndex];
+            base.splice(baseIndex, 1);
+            opt.push(item);
         } else {
-            opt = opt.filter(i => i !== name);
-            base.push(name);
+            const optIndex = opt.findIndex(i => getIngredientName(i) === ingName);
+            if (optIndex !== -1) {
+                // Found in opt, move to base
+                const item = opt[optIndex];
+                opt.splice(optIndex, 1);
+                base.push(item);
+            }
         }
+        
         setEditPlate({ ...editPlate, baseIngredients: base, optionalIngredients: opt });
     };
 
     const addIngredient = () => {
         if (!newIng.trim() || !editPlate) return;
         const name = newIng.trim();
-        if (!editPlate.baseIngredients.includes(name)) {
+        
+        // Check if already exists in base or opt
+        const existsInBase = editPlate.baseIngredients.some(i => getIngredientName(i) === name);
+        const existsInOpt = editPlate.optionalIngredients.some(i => getIngredientName(i) === name);
+        
+        if (!existsInBase && !existsInOpt) {
             setEditPlate({ ...editPlate, baseIngredients: [...editPlate.baseIngredients, name] });
         }
         setNewIng("");
@@ -299,12 +326,12 @@ export default function EditingItemScreen() {
                         <View style={styles.tagsWrapper}>
                             {editPlate.baseIngredients?.map((ing, i) => (
                                 <TouchableOpacity key={`b-${i}`} style={styles.tagBase} onPress={() => toggleIngredient(ing)}>
-                                    <Text style={styles.tagText}>{ing}</Text>
+                                    <Text style={styles.tagText}>{getIngredientName(ing)}</Text>
                                 </TouchableOpacity>
                             ))}
                             {editPlate.optionalIngredients?.map((ing, i) => (
                                 <TouchableOpacity key={`o-${i}`} style={styles.tagOpt} onPress={() => toggleIngredient(ing)}>
-                                    <Text style={styles.tagText}>{ing} (opt)</Text>
+                                    <Text style={styles.tagText}>{getIngredientName(ing)} (opt)</Text>
                                 </TouchableOpacity>
                             ))}
                             <View style={styles.addIngBox}>
