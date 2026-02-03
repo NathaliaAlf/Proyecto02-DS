@@ -26,7 +26,17 @@ if (!firebaseConfig.projectId || !firebaseConfig.apiKey) {
 const app = initializeApp(firebaseConfig);
 const db = getFirestore(app);
 
-const RESTAURANT_ID = 'test-restaurant-01991e1b-6140-4b04-afc1-ad7e8808e2d6';
+const RESTAURANT_ID = 'C6lrz994sDXZGM3durJL';
+
+// Helper function to create ingredient objects
+function createIngredient(name: string, obligatory: boolean = true): { name: string; obligatory: boolean } {
+  return { name, obligatory };
+}
+
+// Helper function to convert string ingredients to Ingredient objects
+function convertToIngredients(ingredientStrings: string[], obligatory: boolean = true): { name: string; obligatory: boolean }[] {
+  return ingredientStrings.map(name => createIngredient(name, obligatory));
+}
 
 // Helper function to create sections with IDs
 function createSections(sectionDTOs: any[]): any[] {
@@ -40,7 +50,9 @@ function createSections(sectionDTOs: any[]): any[] {
       id: uuidv4(),
       name: optionDTO.name,
       additionalCost: optionDTO.additionalCost || 0,
-      ingredients: optionDTO.ingredients || []
+      ingredients: optionDTO.ingredients ? optionDTO.ingredients.map((ing: any) => 
+        typeof ing === 'string' ? createIngredient(ing, true) : ing
+      ) : []
     }))
   }));
 }
@@ -53,7 +65,7 @@ function generatePlateVariants(basePrice: number, baseIngredients: string[], sec
       variantKey: 'default',
       variantName: 'Standard',
       price: basePrice,
-      ingredients: baseIngredients,
+      ingredients: convertToIngredients(baseIngredients, true),
       active: true
     }];
   }
@@ -63,16 +75,32 @@ function generatePlateVariants(basePrice: number, baseIngredients: string[], sec
   
   // For baked goods, we'll create variants based on size and flavor options
   sections.forEach(section => {
-    if (section.name === 'Size' || section.name === 'Flavor') {
+    if (section.name === 'Size' || section.name === 'Flavor' || section.name === 'Bagel Type' || section.name === 'Spread' || section.name === 'Fruit Filling') {
       section.options.forEach((option: any) => {
         const variantKey = `${section.id}:${option.id}`;
         const price = basePrice + (option.additionalCost || 0);
-        let ingredients = [...baseIngredients];
+        let ingredients = convertToIngredients(baseIngredients, true);
         
         // Add flavor ingredients if ingredientDependent
         if (section.ingredientDependent && option.ingredients) {
-          ingredients = [...ingredients, ...option.ingredients];
-          ingredients = [...new Set(ingredients)]; // Remove duplicates
+          // Convert option ingredients to proper format if needed
+          const optionIngredients = option.ingredients.map((ing: any) => 
+            typeof ing === 'string' ? createIngredient(ing, true) : ing
+          );
+          
+          // Add option ingredients (they're obligatory for this variant)
+          ingredients = [...ingredients, ...optionIngredients];
+          
+          // Remove duplicates by name
+          const uniqueIngredients = [];
+          const seenNames = new Set();
+          for (const ing of ingredients) {
+            if (!seenNames.has(ing.name)) {
+              seenNames.add(ing.name);
+              uniqueIngredients.push(ing);
+            }
+          }
+          ingredients = uniqueIngredients;
         }
         
         variants.push({
@@ -94,7 +122,7 @@ function generatePlateVariants(basePrice: number, baseIngredients: string[], sec
       variantKey: 'default',
       variantName: 'Standard',
       price: basePrice,
-      ingredients: baseIngredients,
+      ingredients: convertToIngredients(baseIngredients, true),
       active: true
     });
   }
@@ -102,7 +130,7 @@ function generatePlateVariants(basePrice: number, baseIngredients: string[], sec
   return variants;
 }
 
-// Baked goods plates data
+// Baked goods plates data with ingredients in proper format
 const bakedGoodsPlates = [
   {
     name: 'Classic Croissant',
@@ -127,9 +155,20 @@ const bakedGoodsPlates = [
         multiple: false,
         ingredientDependent: true,
         options: [
-          { name: 'Plain', additionalCost: 0 },
-          { name: 'Chocolate', additionalCost: 1.00, ingredients: ['Chocolate'] },
-          { name: 'Almond', additionalCost: 1.50, ingredients: ['Almond Paste', 'Almonds'] }
+          { name: 'Plain', additionalCost: 0, ingredients: [] },
+          { 
+            name: 'Chocolate', 
+            additionalCost: 1.00, 
+            ingredients: [createIngredient('Chocolate', true)]
+          },
+          { 
+            name: 'Almond', 
+            additionalCost: 1.50, 
+            ingredients: [
+              createIngredient('Almond Paste', true),
+              createIngredient('Almonds', true)
+            ]
+          }
         ]
       }
     ]
@@ -157,10 +196,26 @@ const bakedGoodsPlates = [
         multiple: true,
         ingredientDependent: true,
         options: [
-          { name: 'Walnuts', additionalCost: 1.50, ingredients: ['Walnuts'] },
-          { name: 'Olives', additionalCost: 1.50, ingredients: ['Olives'] },
-          { name: 'Rosemary', additionalCost: 0.50, ingredients: ['Rosemary'] },
-          { name: 'Sunflower Seeds', additionalCost: 1.00, ingredients: ['Sunflower Seeds'] }
+          { 
+            name: 'Walnuts', 
+            additionalCost: 1.50, 
+            ingredients: [createIngredient('Walnuts', true)]
+          },
+          { 
+            name: 'Olives', 
+            additionalCost: 1.50, 
+            ingredients: [createIngredient('Olives', true)]
+          },
+          { 
+            name: 'Rosemary', 
+            additionalCost: 0.50, 
+            ingredients: [createIngredient('Rosemary', true)]
+          },
+          { 
+            name: 'Sunflower Seeds', 
+            additionalCost: 1.00, 
+            ingredients: [createIngredient('Sunflower Seeds', true)]
+          }
         ]
       }
     ]
@@ -188,9 +243,24 @@ const bakedGoodsPlates = [
         multiple: true,
         ingredientDependent: true,
         options: [
-          { name: 'Extra Chocolate Chips', additionalCost: 0.75, ingredients: ['Extra Chocolate Chips'] },
-          { name: 'Cream Cheese Frosting', additionalCost: 1.50, ingredients: ['Cream Cheese', 'Powdered Sugar'] },
-          { name: 'Walnut Pieces', additionalCost: 0.75, ingredients: ['Walnuts'] }
+          { 
+            name: 'Extra Chocolate Chips', 
+            additionalCost: 0.75, 
+            ingredients: [createIngredient('Extra Chocolate Chips', true)]
+          },
+          { 
+            name: 'Cream Cheese Frosting', 
+            additionalCost: 1.50, 
+            ingredients: [
+              createIngredient('Cream Cheese', true),
+              createIngredient('Powdered Sugar', true)
+            ]
+          },
+          { 
+            name: 'Walnut Pieces', 
+            additionalCost: 0.75, 
+            ingredients: [createIngredient('Walnuts', true)]
+          }
         ]
       }
     ]
@@ -218,8 +288,12 @@ const bakedGoodsPlates = [
         multiple: false,
         ingredientDependent: true,
         options: [
-          { name: 'Standard Cream Cheese', additionalCost: 0 },
-          { name: 'Extra Icing', additionalCost: 0.75, ingredients: ['Extra Cream Cheese Icing'] },
+          { name: 'Standard Cream Cheese', additionalCost: 0, ingredients: [] },
+          { 
+            name: 'Extra Icing', 
+            additionalCost: 0.75, 
+            ingredients: [createIngredient('Extra Cream Cheese Icing', true)]
+          },
           { name: 'No Icing', additionalCost: -1.00, ingredients: [] }
         ]
       },
@@ -229,9 +303,24 @@ const bakedGoodsPlates = [
         multiple: true,
         ingredientDependent: true,
         options: [
-          { name: 'Raisins', additionalCost: 0.75, ingredients: ['Raisins'] },
-          { name: 'Walnuts', additionalCost: 1.00, ingredients: ['Walnuts'] },
-          { name: 'Apple Pieces', additionalCost: 1.00, ingredients: ['Apple', 'Cinnamon'] }
+          { 
+            name: 'Raisins', 
+            additionalCost: 0.75, 
+            ingredients: [createIngredient('Raisins', true)]
+          },
+          { 
+            name: 'Walnuts', 
+            additionalCost: 1.00, 
+            ingredients: [createIngredient('Walnuts', true)]
+          },
+          { 
+            name: 'Apple Pieces', 
+            additionalCost: 1.00, 
+            ingredients: [
+              createIngredient('Apple', true),
+              createIngredient('Cinnamon', true)
+            ]
+          }
         ]
       }
     ]
@@ -249,10 +338,30 @@ const bakedGoodsPlates = [
         multiple: false,
         ingredientDependent: true,
         options: [
-          { name: 'Plain', additionalCost: 0 },
-          { name: 'Everything', additionalCost: 0.50, ingredients: ['Sesame Seeds', 'Poppy Seeds', 'Garlic', 'Onion'] },
-          { name: 'Cinnamon Raisin', additionalCost: 0.75, ingredients: ['Cinnamon', 'Raisins'] },
-          { name: 'Whole Wheat', additionalCost: 0.50, ingredients: ['Whole Wheat Flour'] }
+          { name: 'Plain', additionalCost: 0, ingredients: [] },
+          { 
+            name: 'Everything', 
+            additionalCost: 0.50, 
+            ingredients: [
+              createIngredient('Sesame Seeds', true),
+              createIngredient('Poppy Seeds', true),
+              createIngredient('Garlic', true),
+              createIngredient('Onion', true)
+            ]
+          },
+          { 
+            name: 'Cinnamon Raisin', 
+            additionalCost: 0.75, 
+            ingredients: [
+              createIngredient('Cinnamon', true),
+              createIngredient('Raisins', true)
+            ]
+          },
+          { 
+            name: 'Whole Wheat', 
+            additionalCost: 0.50, 
+            ingredients: [createIngredient('Whole Wheat Flour', true)]
+          }
         ]
       },
       {
@@ -261,11 +370,39 @@ const bakedGoodsPlates = [
         multiple: false,
         ingredientDependent: true,
         options: [
-          { name: 'Cream Cheese', additionalCost: 0, ingredients: ['Cream Cheese'] },
-          { name: 'Butter', additionalCost: 0, ingredients: ['Butter'] },
-          { name: 'Peanut Butter', additionalCost: 0.50, ingredients: ['Peanut Butter'] },
-          { name: 'Avocado', additionalCost: 1.50, ingredients: ['Avocado', 'Lemon Juice', 'Salt'] },
-          { name: 'Hummus', additionalCost: 1.00, ingredients: ['Chickpeas', 'Tahini', 'Lemon'] }
+          { 
+            name: 'Cream Cheese', 
+            additionalCost: 0, 
+            ingredients: [createIngredient('Cream Cheese', true)]
+          },
+          { 
+            name: 'Butter', 
+            additionalCost: 0, 
+            ingredients: [createIngredient('Butter', true)]
+          },
+          { 
+            name: 'Peanut Butter', 
+            additionalCost: 0.50, 
+            ingredients: [createIngredient('Peanut Butter', true)]
+          },
+          { 
+            name: 'Avocado', 
+            additionalCost: 1.50, 
+            ingredients: [
+              createIngredient('Avocado', true),
+              createIngredient('Lemon Juice', true),
+              createIngredient('Salt', true)
+            ]
+          },
+          { 
+            name: 'Hummus', 
+            additionalCost: 1.00, 
+            ingredients: [
+              createIngredient('Chickpeas', true),
+              createIngredient('Tahini', true),
+              createIngredient('Lemon', true)
+            ]
+          }
         ]
       },
       {
@@ -274,11 +411,31 @@ const bakedGoodsPlates = [
         multiple: true,
         ingredientDependent: true,
         options: [
-          { name: 'Smoked Salmon', additionalCost: 3.50, ingredients: ['Smoked Salmon'] },
-          { name: 'Tomato Slices', additionalCost: 0.75, ingredients: ['Tomato'] },
-          { name: 'Cucumber Slices', additionalCost: 0.75, ingredients: ['Cucumber'] },
-          { name: 'Red Onion', additionalCost: 0.50, ingredients: ['Red Onion'] },
-          { name: 'Capers', additionalCost: 0.50, ingredients: ['Capers'] }
+          { 
+            name: 'Smoked Salmon', 
+            additionalCost: 3.50, 
+            ingredients: [createIngredient('Smoked Salmon', true)]
+          },
+          { 
+            name: 'Tomato Slices', 
+            additionalCost: 0.75, 
+            ingredients: [createIngredient('Tomato', true)]
+          },
+          { 
+            name: 'Cucumber Slices', 
+            additionalCost: 0.75, 
+            ingredients: [createIngredient('Cucumber', true)]
+          },
+          { 
+            name: 'Red Onion', 
+            additionalCost: 0.50, 
+            ingredients: [createIngredient('Red Onion', true)]
+          },
+          { 
+            name: 'Capers', 
+            additionalCost: 0.50, 
+            ingredients: [createIngredient('Capers', true)]
+          }
         ]
       }
     ]
@@ -296,11 +453,38 @@ const bakedGoodsPlates = [
         multiple: false,
         ingredientDependent: true,
         options: [
-          { name: 'Apple Cinnamon', additionalCost: 0, ingredients: ['Apple', 'Cinnamon'] },
-          { name: 'Cherry', additionalCost: 0, ingredients: ['Cherries'] },
-          { name: 'Blueberry', additionalCost: 0, ingredients: ['Blueberries'] },
-          { name: 'Raspberry', additionalCost: 0.50, ingredients: ['Raspberries'] },
-          { name: 'Mixed Berry', additionalCost: 0.75, ingredients: ['Blueberries', 'Raspberries', 'Strawberries'] }
+          { 
+            name: 'Apple Cinnamon', 
+            additionalCost: 0, 
+            ingredients: [
+              createIngredient('Apple', true),
+              createIngredient('Cinnamon', true)
+            ]
+          },
+          { 
+            name: 'Cherry', 
+            additionalCost: 0, 
+            ingredients: [createIngredient('Cherries', true)]
+          },
+          { 
+            name: 'Blueberry', 
+            additionalCost: 0, 
+            ingredients: [createIngredient('Blueberries', true)]
+          },
+          { 
+            name: 'Raspberry', 
+            additionalCost: 0.50, 
+            ingredients: [createIngredient('Raspberries', true)]
+          },
+          { 
+            name: 'Mixed Berry', 
+            additionalCost: 0.75, 
+            ingredients: [
+              createIngredient('Blueberries', true),
+              createIngredient('Raspberries', true),
+              createIngredient('Strawberries', true)
+            ]
+          }
         ]
       },
       {
@@ -309,9 +493,21 @@ const bakedGoodsPlates = [
         multiple: false,
         ingredientDependent: true,
         options: [
-          { name: 'Standard Glaze', additionalCost: 0 },
-          { name: 'Almond Streusel', additionalCost: 1.00, ingredients: ['Almonds', 'Brown Sugar', 'Butter'] },
-          { name: 'Cream Cheese Dollop', additionalCost: 1.25, ingredients: ['Cream Cheese'] }
+          { name: 'Standard Glaze', additionalCost: 0, ingredients: [] },
+          { 
+            name: 'Almond Streusel', 
+            additionalCost: 1.00, 
+            ingredients: [
+              createIngredient('Almonds', true),
+              createIngredient('Brown Sugar', true),
+              createIngredient('Butter', true)
+            ]
+          },
+          { 
+            name: 'Cream Cheese Dollop', 
+            additionalCost: 1.25, 
+            ingredients: [createIngredient('Cream Cheese', true)]
+          }
         ]
       }
     ]
@@ -353,7 +549,7 @@ async function seedBakedGoodsMenu() {
         name: plateDTO.name,
         description: plateDTO.description,
         basePrice: plateDTO.basePrice,
-        baseIngredients: plateDTO.baseIngredients,
+        baseIngredients: convertToIngredients(plateDTO.baseIngredients, true),
         imageUrl: plateDTO.imageUrl,
         active: true,
         sections,
@@ -376,6 +572,8 @@ async function seedBakedGoodsMenu() {
     
     console.log('\n📝 Creating menu with plates:');
     plates.forEach((plate, index) => {
+      console.log(`   ${index + 1}. ${plate.name}`);
+      console.log(`     Base ingredients: ${plate.baseIngredients.map(i => i.name).join(', ')}`);
       console.log(`     Sections: ${plate.sections.map(s => s.name).join(', ')}`);
       console.log(`     Variants: ${plate.variants.length} options available`);
     });
@@ -388,9 +586,10 @@ async function seedBakedGoodsMenu() {
     console.log(`📁 Menu ID: ${menuId}`);
     console.log(`🍽️  Total plates: ${plates.length}`);
     
-    await updateDoc(restaurantRef,{
-        lastUpdated: now,
-        menuID: menuId
+    // Update restaurant with menu reference
+    await updateDoc(restaurantRef, {
+      lastUpdated: now,
+      menuID: menuId
     });
     console.log(`🏪 Updated restaurant with menu reference`);
     
@@ -398,7 +597,6 @@ async function seedBakedGoodsMenu() {
     console.log('\n📋 Sample API calls to use this menu:');
     console.log(`1. Get menu: menuApi.getMenu("${menuId}")`);
     console.log(`2. Get active menu for restaurant: menuApi.getActiveMenu("${RESTAURANT_ID}")`);
-    console.log(`3. Get plates by category: menuApi.getPlatesByCategory("${menuId}", "Pastries")`);
     
   } catch (error: any) {
     console.error('❌ Error seeding baked goods menu:', error.message);

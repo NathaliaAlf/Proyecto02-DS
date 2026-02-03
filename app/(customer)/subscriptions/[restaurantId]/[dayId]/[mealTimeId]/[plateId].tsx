@@ -1,7 +1,7 @@
 // (customer)/restaurants/[categoryId]/[restaurantId]/plate/[plateId].tsx
 import { useAuth } from '@/context/AuthContext';
+import { useSubscription } from '@/context/SubscriptionContext';
 import { useTheme } from '@/context/ThemeContext';
-import { useCart } from '@/hooks/useCart';
 import { menuApi } from '@/services/api/menuApi';
 import { restaurantApi } from '@/services/api/restaurantApi';
 import { Ingredient, Plate } from '@/types/menu';
@@ -24,29 +24,80 @@ import {
 } from 'react-native';
 import { Checkbox } from 'react-native-paper';
 
+// Define the type for detailed plate customization
+interface DetailedPlateCustomization {
+  plateId: string;
+  plateName: string;
+  quantity: number;
+  customization: {
+    selectedOptions: Array<{
+      sectionId: string;
+      sectionName: string;
+      optionId: string;
+      optionName: string;
+      additionalCost: number;
+      ingredientDependent?: boolean;
+      optionIngredients?: Ingredient[];
+    }>;
+    removedIngredients: string[];
+    notes: string;
+    totalPrice: number;
+    plateDetails?: {
+      basePrice: number;
+      description: string;
+      baseIngredients: Ingredient[];
+      sections: Array<{
+        id: string;
+        name: string;
+        required: boolean;
+        multiple: boolean;
+        ingredientDependent: boolean;
+        options: Array<{
+          id: string;
+          name: string;
+          additionalCost: number;
+          ingredients?: Ingredient[];
+        }>;
+      }>;
+      customizationState: {
+        removedIngredients: string[];
+        selectedOptions: Record<string, string[]>;
+        quantity: number;
+        notes: string;
+      };
+      currentIngredients: Ingredient[];
+      imageUrl?: string;
+    };
+  };
+}
+
 export default function PlateDetailScreen() {
   const { colors } = useTheme();
   const { user } = useAuth();
+  const { selectedSchedule, updateMealCompletion, getNextUncompletedMeal } = useSubscription();
   const styles = createStyles(colors);
-  const { restaurantId, plateId, plateName } = useLocalSearchParams<{
+  
+  const { restaurantId, plateId, plateName, dayId, mealTimeId, subscriptionFlow } = useLocalSearchParams<{
     restaurantId: string;
     plateId: string;
     plateName: string;
+    dayId?: string;
+    mealTimeId?: string;
+    subscriptionFlow?: string;
   }>();
-  
-  const { addToCart, loading: cartLoading } = useCart();
   
   const [plate, setPlate] = useState<Plate | null>(null);
   const [restaurantName, setRestaurantName] = useState<string>('');
   const [menuId, setMenuId] = useState<string>('');
   const [loading, setLoading] = useState(true);
-  const [addingToCart, setAddingToCart] = useState(false);
   const [selectedOptions, setSelectedOptions] = useState<Record<string, string[]>>({});
   const [removedIngredients, setRemovedIngredients] = useState<Set<string>>(new Set());
   const [quantity, setQuantity] = useState(1);
   const [notes, setNotes] = useState<string>('');
   const [showNotesModal, setShowNotesModal] = useState(false);
   const [modalNotes, setModalNotes] = useState('');
+  
+  const isSubscriptionFlow = subscriptionFlow === 'true';
 
   useEffect(() => {
     loadPlate();
@@ -75,11 +126,8 @@ export default function PlateDetailScreen() {
   };
 
   const toggleIngredient = (ingredientName: string, isObligatory: boolean) => {
-    // Don't allow toggling obligatory ingredients
-    if (isObligatory) {
-      return;
-    }
-
+    if (isObligatory) return;
+    
     setRemovedIngredients(prev => {
       const newSet = new Set(prev);
       if (newSet.has(ingredientName)) {
@@ -146,6 +194,21 @@ export default function PlateDetailScreen() {
     return total * quantity;
   };
 
+  const handleOpenNotesModal = () => {
+    setModalNotes(notes);
+    setShowNotesModal(true);
+  };
+
+  const handleSaveNotes = () => {
+    setNotes(modalNotes);
+    setShowNotesModal(false);
+  };
+
+  const handleCancelNotes = () => {
+    setShowNotesModal(false);
+  };
+
+  // Helper function to get selected option details
   const getSelectedOptionDetails = () => {
     if (!plate) return [];
     
@@ -178,13 +241,12 @@ export default function PlateDetailScreen() {
     return selectedOptionDetails;
   };
 
-  const getCurrentIngredients = () => {
+  // Helper function to get filtered ingredients for cart
+  const getFilteredIngredientsForCart = (): Ingredient[] => {
     if (!plate) return [];
     
-    // Start with base ingredients
     let allIngredients = [...plate.baseIngredients];
     
-    // Add ingredients from selected options that are ingredient-dependent
     Object.entries(selectedOptions).forEach(([sectionId, optionIds]) => {
       const section = plate.sections.find(s => s.id === sectionId);
       if (section?.ingredientDependent) {
@@ -197,7 +259,36 @@ export default function PlateDetailScreen() {
       }
     });
     
-    // Remove duplicates based on ingredient name while preserving the first occurrence
+    const uniqueIngredients = allIngredients.reduce((acc, ing) => {
+      if (!acc.some(i => i.name === ing.name)) {
+        acc.push(ing);
+      }
+      return acc;
+    }, [] as Ingredient[]);
+    
+    return uniqueIngredients.filter(ing => 
+      ing.obligatory || !removedIngredients.has(ing.name)
+    );
+  };
+
+  // Helper function to get current ingredients
+  const getCurrentIngredients = () => {
+    if (!plate) return [];
+    
+    let allIngredients = [...plate.baseIngredients];
+    
+    Object.entries(selectedOptions).forEach(([sectionId, optionIds]) => {
+      const section = plate.sections.find(s => s.id === sectionId);
+      if (section?.ingredientDependent) {
+        optionIds.forEach(optionId => {
+          const option = section.options.find(o => o.id === optionId);
+          if (option?.ingredients) {
+            allIngredients = [...allIngredients, ...option.ingredients];
+          }
+        });
+      }
+    });
+    
     const uniqueIngredients = allIngredients.reduce((acc, ing) => {
       if (!acc.some(i => i.name === ing.name)) {
         acc.push(ing);
@@ -208,128 +299,25 @@ export default function PlateDetailScreen() {
     return uniqueIngredients;
   };
 
-  const getFilteredIngredientsForCart = (): Ingredient[] => {
-    if (!plate) return [];
-    
-    // Get all ingredients (same as getCurrentIngredients)
-    let allIngredients = [...plate.baseIngredients];
-    
-    Object.entries(selectedOptions).forEach(([sectionId, optionIds]) => {
-      const section = plate.sections.find(s => s.id === sectionId);
-      if (section?.ingredientDependent) {
-        optionIds.forEach(optionId => {
-          const option = section.options.find(o => o.id === optionId);
-          if (option?.ingredients) {
-            allIngredients = [...allIngredients, ...option.ingredients];
-          }
-        });
-      }
-    });
-    
-    // Remove duplicates
-    const uniqueIngredients = allIngredients.reduce((acc, ing) => {
-      if (!acc.some(i => i.name === ing.name)) {
-        acc.push(ing);
-      }
-      return acc;
-    }, [] as Ingredient[]);
-    
-    // Filter out removed ingredients (but keep obligatory ones)
-    return uniqueIngredients.filter(ing => 
-      ing.obligatory || !removedIngredients.has(ing.name)
-    );
-  };
+  const handleAddToOrder = () => {
+    if (!plate) return;
 
-  const handleOpenNotesModal = () => {
-    setModalNotes(notes);
-    setShowNotesModal(true);
-  };
-
-  const handleSaveNotes = () => {
-    setNotes(modalNotes);
-    setShowNotesModal(false);
-  };
-
-  const handleCancelNotes = () => {
-    setShowNotesModal(false);
-  };
-
-  const handleAddToOrder = async () => {
-    if (!user) {
-      Alert.alert(
-        'Login Required',
-        'You need to be logged in to add items to your cart.',
-        [
-          {
-            text: 'Cancel',
-            style: 'cancel',
-          },
-          {
-            text: 'Login',
-            onPress: () => router.push('/(auth-customer)/login')
-          }
-        ]
-      );
-      return;
-    }
-
-    if (user.userType !== 'customer') {
-      Alert.alert(
-        'Account Type Error',
-        'Only customer accounts can add items to cart.',
-        [
-          {
-            text: 'OK',
-            style: 'default',
-          }
-        ]
-      );
-      return;
-    }
-
-    if (!plate || !restaurantId || !menuId) {
-      Alert.alert('Error', 'Missing required information');
-      return;
-    }
+    // Calculate price per plate
+    const pricePerPlate = calculateTotalPrice() / quantity;
     
-    for (const section of plate.sections) {
-      if (section.required && (!selectedOptions[section.id] || selectedOptions[section.id].length === 0)) {
-        Alert.alert('Required Option', `Please select an option for "${section.name}"`);
-        return;
-      }
-    }
+    // Get selected option details
+    const selectedOptionDetails = getSelectedOptionDetails();
     
-    setAddingToCart(true);
-    
-    try {
-      const selectedOptionArray = Object.entries(selectedOptions).flatMap(([sectionId, optionIds]) =>
-        optionIds.map(optionId => ({ sectionId, optionId }))
-      );
-      
-      const priceResult = await menuApi.calculateCustomizedPlate(
-        menuId,
-        plateId!,
-        selectedOptionArray
-      );
-      
-      if (!priceResult.success || !priceResult.data) {
-        throw new Error(priceResult.error || 'Failed to calculate price');
-      }
-      
-      const customizedPlate = priceResult.data;
-      
-      // Use the filtered ingredients for cart
-      const filteredIngredients = getFilteredIngredientsForCart();
-      
-      const result = await addToCart(
-        menuId,
-        plate.id,
-        plate.name,
-        restaurantId,
-        restaurantName,
-        customizedPlate.finalPrice / quantity,
-        quantity,
-        getSelectedOptionDetails().map(option => ({
+    // Get filtered ingredients (with removed ingredients filtered out)
+    const filteredIngredients = getFilteredIngredientsForCart();
+
+    // Create complete plate customization object
+    const plateCustomization: DetailedPlateCustomization = {
+      plateId: plate.id,
+      plateName: plate.name,
+      quantity,
+      customization: {
+        selectedOptions: selectedOptionDetails.map(option => ({
           ...option,
           ingredientDependent: plate.sections.find(s => s.id === option.sectionId)?.ingredientDependent || false,
           optionIngredients: plate.sections
@@ -337,12 +325,10 @@ export default function PlateDetailScreen() {
             ?.options.find(o => o.id === option.optionId)
             ?.ingredients || []
         })),
-        customizedPlate.variantId,
-        filteredIngredients,
-        plate.imageUrl,
-        notes.trim(),
-        // NEW: Add plate details
-        {
+        removedIngredients: Array.from(removedIngredients),
+        notes: notes.trim(),
+        totalPrice: pricePerPlate,
+        plateDetails: {
           basePrice: plate.basePrice,
           description: plate.description,
           baseIngredients: plate.baseIngredients,
@@ -355,7 +341,7 @@ export default function PlateDetailScreen() {
             options: section.options.map(option => ({
               id: option.id,
               name: option.name,
-              additionalCost: option.additionalCost,
+              additionalCost: option.additionalCost || 0,
               ingredients: option.ingredients || []
             }))
           })),
@@ -365,149 +351,88 @@ export default function PlateDetailScreen() {
             quantity,
             notes: notes.trim()
           },
-          currentIngredients: getFilteredIngredientsForCart()
+          currentIngredients: filteredIngredients,
+          imageUrl: plate.imageUrl
         }
+      }
+    };
+
+    if (isSubscriptionFlow) {
+      handleSubscriptionFlow(plateCustomization); // Pass single plate, not array
+    } else {
+      // Regular flow
+      Alert.alert(
+        'Added to Order',
+        `Added ${quantity}x ${plate.name} to your order.`,
+        [{ text: 'OK' }]
       );
       
-      if (result) {
-        Alert.alert(
-          'Added to Cart',
-          `${quantity}x "${plate.name}" added to your cart${notes ? ' with notes' : ''}`,
-          [
-            {
-              text: 'Continue Shopping',
-              style: 'cancel',
-              onPress: () => {
-                setNotes('');
-                router.back();
-              }
-            },
-            {
-              text: 'Go to Cart',
-              onPress: () => {
-                setNotes('');
-                router.push('/Cart');
-              }
-            }
-          ]
-        );
-      }
-      
-    } catch (error) {
-      console.error('Error adding to cart:', error);
-      
-      // Check if it's a restaurant mismatch error
-      const errorMessage = error instanceof Error ? error.message : 'Failed to add item to cart';
-      
-      if (errorMessage.includes('Your cart contains items from')) {
-        // Extract restaurant names from error message
-        const match = errorMessage.match(/Your cart contains items from (.*?)\. Please checkout or clear cart before adding items from (.*)/);
-        
-        if (match) {
-          const currentRestaurant = match[1];
-          const newRestaurant = match[2] || restaurantName;
-          
-          Alert.alert(
-            'Different Restaurant',
-            `Your cart contains items from "${currentRestaurant}".\n\nYou're trying to add an item from "${newRestaurant}".\n\nWould you like to:`,
-            [
-              {
-                text: 'Keep Current Cart',
-                style: 'cancel',
-                onPress: () => {
-                  // Option 1: Keep current cart, go to cart screen
-                  router.push('/Cart');
-                }
-              },
-              {
-                text: 'View Current Cart',
-                onPress: () => {
-                  router.push('/Cart');
-                }
-              },
-              {
-                text: 'Clear & Add New Item',
-                style: 'destructive',
-                onPress: async () => {
-                  // Option 3: Clear cart and add new item
-                  try {
-                    setAddingToCart(true);
-                    
-                    // Calculate price again (in case it wasn't calculated before error)
-                    const selectedOptionArray = Object.entries(selectedOptions).flatMap(([sectionId, optionIds]) =>
-                      optionIds.map(optionId => ({ sectionId, optionId }))
-                    );
-                    
-                    const priceResult = await menuApi.calculateCustomizedPlate(
-                      menuId,
-                      plateId!,
-                      selectedOptionArray
-                    );
-                    
-                    if (!priceResult.success || !priceResult.data) {
-                      throw new Error(priceResult.error || 'Failed to calculate price');
-                    }
-                    
-                    const customizedPlate = priceResult.data;
-                    const filteredIngredients = getFilteredIngredientsForCart();
-                    
-                    // Store the item data to add after clearing
-                    const itemToAdd = {
-                      menuId,
-                      plateId: plate.id,
-                      plateName: plate.name,
-                      restaurantId,
-                      restaurantName,
-                      price: customizedPlate.finalPrice / quantity,
-                      quantity,
-                      selectedOptions: getSelectedOptionDetails(),
-                      variantId: customizedPlate.variantId,
-                      customIngredients: filteredIngredients,
-                      imageUrl: plate.imageUrl,
-                      notes: notes.trim()
-                    };
-                    
-                    // Navigate to cart with instructions to clear and add this item
-                    router.push({
-                      pathname: '/Cart',
-                      params: { 
-                        clearAndAddItem: 'true',
-                        itemData: JSON.stringify(itemToAdd)
-                      }
-                    });
-                    
-                  } catch (navError) {
-                    console.error('Error preparing to clear cart:', navError);
-                    Alert.alert('Error', 'Failed to prepare item for adding. Please try again.');
-                    setAddingToCart(false);
-                  }
-                }
-              }
-            ]
-          );
-        } else {
-          // Fallback if regex doesn't match
-          Alert.alert(
-            'Different Restaurant',
-            errorMessage + '\n\nPlease checkout or clear your cart first.',
-            [
-              { 
-                text: 'Go to Cart', 
-                onPress: () => router.push('/Cart') 
-              },
-              { text: 'OK', style: 'default' }
-            ]
-          );
-        }
-      } else {
-        // Other errors
-        Alert.alert('Error', errorMessage);
-      }
-    } finally {
-      setAddingToCart(false);
+      router.back();
     }
   };
 
+  const handleSubscriptionFlow = (newPlateData: DetailedPlateCustomization) => {
+    if (!dayId || !mealTimeId || !selectedSchedule.length) {
+      Alert.alert('Error', 'Missing required information for subscription flow.');
+      console.error('Missing params:', { dayId, mealTimeId, selectedScheduleLength: selectedSchedule.length });
+      return;
+    }
+
+    // Find current day/meal indices
+    const currentDayIndex = selectedSchedule.findIndex(day => day.day === dayId);
+    console.log('Searching for dayId:', dayId, 'in schedule:', selectedSchedule.map(d => ({ day: d.day, dayLabel: d.dayLabel })));
+    console.log('Found day index:', currentDayIndex);
+    
+    if (currentDayIndex === -1) {
+      Alert.alert('Error', 'Could not find current day in schedule.');
+      return;
+    }
+    
+    const currentMealIndex = selectedSchedule[currentDayIndex].meals.findIndex(meal => meal.type === mealTimeId);
+    console.log('Searching for mealTimeId:', mealTimeId, 'in day meals:', selectedSchedule[currentDayIndex].meals.map(m => ({ type: m.type, typeLabel: m.typeLabel })));
+    console.log('Found meal index:', currentMealIndex);
+    
+    if (currentMealIndex === -1) {
+      Alert.alert('Error', 'Could not find current meal in schedule.');
+      return;
+    }
+
+    // Get existing plates for this meal
+    const existingPlates = selectedSchedule[currentDayIndex].meals[currentMealIndex].selectedPlates || [];
+    console.log('Existing plates before update:', existingPlates);
+
+    // Check if this plate already exists
+    const existingPlateIndex = Array.isArray(existingPlates) 
+      ? existingPlates.findIndex((p: any) => p.plateId === newPlateData.plateId)
+      : -1;
+
+    let updatedPlates: DetailedPlateCustomization[];
+    
+    if (existingPlateIndex >= 0) {
+      // Update existing plate (replace with new customization)
+      updatedPlates = [...existingPlates];
+      updatedPlates[existingPlateIndex] = newPlateData;
+      console.log('Updated existing plate at index:', existingPlateIndex);
+    } else {
+      // Add new plate to the array
+      updatedPlates = [...existingPlates, newPlateData];
+      console.log('Added new plate to array');
+    }
+
+    console.log('Updated plates array:', updatedPlates);
+    console.log('Calling updateMealCompletion with:', {
+      dayIndex: currentDayIndex,
+      mealIndex: currentMealIndex,
+      platesCount: updatedPlates.length
+    });
+
+    // Call updateMealCompletion with the updated plates array
+    updateMealCompletion(currentDayIndex, currentMealIndex, false, updatedPlates);
+
+    // Navigate back to the menu
+    console.log('Navigating back to menu...');
+    router.back();
+  };
 
   if (loading) {
     return (
@@ -533,7 +458,7 @@ export default function PlateDetailScreen() {
   }
 
   const currentIngredients = getCurrentIngredients();
-
+  
   return (
     <View style={styles.container}>
       <ScrollView style={styles.scrollView} contentContainerStyle={styles.scrollContent}>
@@ -627,7 +552,7 @@ export default function PlateDetailScreen() {
               Tap to remove ingredients. <Text style={styles.mandatoryNote}>Red items cannot be removed.</Text>
             </Text>
             <View style={styles.ingredientsContainer}>
-              {getCurrentIngredients().map((ingredient, index) => {
+              {currentIngredients.map((ingredient, index) => {
                 const isRemoved = removedIngredients.has(ingredient.name);
                 const isMandatory = ingredient.obligatory;
                 
@@ -649,7 +574,6 @@ export default function PlateDetailScreen() {
                       isRemoved && !isMandatory && styles.ingredientButtonTextRemoved
                     ]}>
                       {ingredient.name}
-                      {isRemoved && !isMandatory}
                     </Text>
                   </TouchableOpacity>
                 );
@@ -662,7 +586,6 @@ export default function PlateDetailScreen() {
             <Text style={styles.sectionTitle}>Comments</Text>
             <Text style={styles.notesSubtitle}>Add any special requests or notes for this item</Text>
             
-            {/* Notes Preview Button */}
             <TouchableOpacity 
               style={styles.notesPreviewButton}
               onPress={handleOpenNotesModal}
@@ -714,18 +637,12 @@ export default function PlateDetailScreen() {
         <TouchableOpacity 
           style={[
             styles.addToCartButton,
-            (addingToCart || cartLoading) && styles.addToCartButtonDisabled
           ]}
           onPress={handleAddToOrder}
-          disabled={addingToCart || cartLoading}
         >
-          {addingToCart ? (
-            <ActivityIndicator color="white" size="small" />
-          ) : (
-            <Text style={styles.addToCartButtonText}>
-              {user ? 'Add to Cart' : 'Login to Order'}
-            </Text>
-          )}
+          <Text style={styles.addToCartButtonText}>
+            {isSubscriptionFlow ? 'Add & Continue' : 'Add to Order'}
+          </Text>
         </TouchableOpacity>
       </View>
 
@@ -921,16 +838,13 @@ const createStyles = (colors: any) => StyleSheet.create({
   notesPreviewButton: {
     backgroundColor: colors.third,
     padding: 16,
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'flex-start',
-    minHeight: 150,
+    borderRadius: 8,
+    minHeight: 100,
   },
   notesPreviewText: {
     fontSize: 15,
     color: colors.text,
     flex: 1,
-    marginRight: 12,
   },
   notesPreviewPlaceholder: {
     color: colors.second,
@@ -953,6 +867,7 @@ const createStyles = (colors: any) => StyleSheet.create({
     borderRadius: 20,
     borderWidth: 1,
     backgroundColor: colors.defaultColor,
+    borderColor: colors.defaultColor,
   },
   ingredientButtonMandatory: {
     backgroundColor: '#7F1D1D',
@@ -975,21 +890,17 @@ const createStyles = (colors: any) => StyleSheet.create({
   ingredientButtonTextRemoved: {
     color: colors.defaultColor,
   },
-  ingredientButtonSelected: {
-    backgroundColor: colors.second,
-    borderColor: 'transparent',
-  },
-  ingredientButtonTextSelected: {
-    color: colors.defaultColor,
-  },
   optionsList: {
     gap: 5,
   },
   optionItem: {
     flexDirection: 'row',
     alignItems: 'center',
+    paddingVertical: 8,
   },
   optionItemSelected: {
+    backgroundColor: colors.third,
+    borderRadius: 8,
   },
   optionInfo: {
     flex: 1,
@@ -1028,11 +939,6 @@ const createStyles = (colors: any) => StyleSheet.create({
     left: 0,
     right: 0,
     backgroundColor: colors.defaultColor,
-    borderTopWidth: 1,
-    borderRadius: 35,
-    margin: 20,
-    height: 70,
-    borderTopColor: colors.border,
     padding: 16,
     flexDirection: 'row',
     alignItems: 'center',
@@ -1041,7 +947,6 @@ const createStyles = (colors: any) => StyleSheet.create({
   quantityContainer: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: colors.card,
     borderRadius: 12,
     padding: 4,
     marginRight: 16,
@@ -1052,7 +957,7 @@ const createStyles = (colors: any) => StyleSheet.create({
     borderRadius: 10,
     justifyContent: 'center',
     alignItems: 'center',
-    color: colors.backgroundColor,
+    backgroundColor: colors.defaultColor,
   },
   quantityButtonDisabled: {
     opacity: 0.5,
@@ -1060,10 +965,11 @@ const createStyles = (colors: any) => StyleSheet.create({
   quantityButtonText: {
     fontSize: 20,
     fontWeight: 'bold',
-    color: 'white',
+    color: colors.background,
   },
   quantityButtonTextDisabled: {
-    color: colors.third,
+    color: colors.background,
+
   },
   quantityText: {
     fontSize: 18,
@@ -1075,8 +981,9 @@ const createStyles = (colors: any) => StyleSheet.create({
   },
   priceContainer: {
     flexDirection: 'row',
-    alignItems: 'center',
+    alignItems: 'flex-start',
     marginTop: 20,
+    justifyContent: 'flex-start',
   },
   totalPriceLabel: {
     fontSize: 30,
@@ -1092,17 +999,14 @@ const createStyles = (colors: any) => StyleSheet.create({
   },
   addToCartButton: {
     paddingHorizontal: 24,
+    paddingVertical: 12,
     borderRadius: 12,
     minWidth: 140,
     alignItems: 'center',
     justifyContent: 'center',
-    height: 44,
-  },
-  addToCartButtonDisabled: {
-    opacity: 0.7,
   },
   addToCartButtonText: {
-    color: 'white',
+    color: colors.background,
     fontSize: 16,
     fontWeight: 'bold',
   },
@@ -1141,6 +1045,7 @@ const createStyles = (colors: any) => StyleSheet.create({
   },
   modalTextInput: {
     backgroundColor: colors.third,
+    borderRadius: 8,
     padding: 16,
     fontSize: 16,
     color: colors.text,

@@ -1,38 +1,40 @@
 // api/menuApi.ts
 import { db } from '@/config/firebase';
 import {
-    addDoc,
-    collection,
-    deleteDoc,
-    doc,
-    getDoc,
-    getDocs,
-    limit,
-    orderBy,
-    query,
-    updateDoc,
-    where
+  addDoc,
+  collection,
+  deleteDoc,
+  doc,
+  getDoc,
+  getDocs,
+  limit,
+  orderBy,
+  query,
+  updateDoc,
+  where
 } from 'firebase/firestore';
 import { v4 as uuidv4 } from 'uuid';
 
 import {
-    CustomizedPlate,
-    Menu,
-    MenuCreateDTO,
-    MenuSection,
-    MenuSectionCreateDTO,
-    MenuUpdateDTO,
-    Plate,
-    PlateCreateDTO,
-    PlateUpdateDTO,
-    PlateVariant,
-    SelectedOption
+  CustomizedPlate,
+  Ingredient,
+  Menu,
+  MenuCreateDTO,
+  MenuSection,
+  MenuSectionCreateDTO,
+  MenuUpdateDTO,
+  normalizeIngredients,
+  Plate,
+  PlateCreateDTO,
+  PlateUpdateDTO,
+  PlateVariant,
+  SelectedOption
 } from '@/types/menu';
 
 // Helper function to generate plate variants
 function generatePlateVariants(
   basePrice: number,
-  baseIngredients: string[],
+  baseIngredients: Ingredient[],
   sections: MenuSection[]
 ): PlateVariant[] {
   if (sections.length === 0) {
@@ -123,7 +125,7 @@ function generatePlateVariants(
     const variantParts: string[] = [];
     const variantNameParts: string[] = [];
     let totalPrice = basePrice;
-    let ingredients = [...baseIngredients];
+    let ingredients: Ingredient[] = [...baseIngredients];
 
     combination.forEach(({ sectionId, optionId }) => {
       const section = validSections.find(s => s.id === sectionId);
@@ -140,8 +142,6 @@ function generatePlateVariants(
         
         // Modify ingredients if ingredientDependent
         if (section.ingredientDependent && option.ingredients) {
-          // For simplicity, we'll replace ingredients for this section
-          // You might want more complex logic here
           ingredients = [...ingredients, ...option.ingredients];
         }
       }
@@ -150,12 +150,20 @@ function generatePlateVariants(
     const variantKey = variantParts.sort().join('|');
     const variantName = variantNameParts.join(', ');
 
+    // Remove duplicate ingredients based on name
+    const uniqueIngredients = ingredients.reduce((acc, ing) => {
+      if (!acc.some(i => i.name === ing.name)) {
+        acc.push(ing);
+      }
+      return acc;
+    }, [] as Ingredient[]);
+
     return {
       id: uuidv4(),
       variantKey,
       variantName: variantName || 'Standard',
       price: totalPrice,
-      ingredients: [...new Set(ingredients)], // Remove duplicates
+      ingredients: uniqueIngredients,
       active: true
     };
   });
@@ -188,6 +196,32 @@ function createSections(sectionDTOs: MenuSectionCreateDTO[]): MenuSection[] {
   }));
 }
 
+// Helper to normalize plate data from Firestore
+function normalizePlateData(plateData: any): Plate {
+  return {
+    id: plateData.id,
+    name: plateData.name,
+    description: plateData.description,
+    basePrice: plateData.basePrice,
+    baseIngredients: normalizeIngredients(plateData.baseIngredients || []),
+    imageUrl: plateData.imageUrl,
+    active: plateData.active !== undefined ? plateData.active : true,
+    sections: (plateData.sections || []).map((section: any) => ({
+      ...section,
+      options: (section.options || []).map((option: any) => ({
+        ...option,
+        ingredients: option.ingredients ? normalizeIngredients(option.ingredients) : []
+      }))
+    })),
+    variants: (plateData.variants || []).map((variant: any) => ({
+      ...variant,
+      ingredients: normalizeIngredients(variant.ingredients || [])
+    })),
+    createdAt: plateData.createdAt,
+    updatedAt: plateData.updatedAt
+  };
+}
+
 export const menuApi = {
   // ========== MENU CRUD ==========
   
@@ -205,7 +239,7 @@ export const menuApi = {
           name: menuData.name,
           description: menuData.description,
           active: menuData.active,
-          plates: menuData.plates || [],
+          plates: (menuData.plates || []).map((plateData: any) => normalizePlateData(plateData)),
           createdAt: menuData.createdAt,
           updatedAt: menuData.updatedAt
         };
@@ -244,7 +278,7 @@ export const menuApi = {
           name: menuData.name,
           description: menuData.description,
           active: menuData.active,
-          plates: menuData.plates || [],
+          plates: (menuData.plates || []).map((plateData: any) => normalizePlateData(plateData)),
           createdAt: menuData.createdAt,
           updatedAt: menuData.updatedAt
         });
@@ -260,7 +294,7 @@ export const menuApi = {
     }
   },
 
-  // Get active menu for restaurant
+  // Get active menu for a restaurant
   async getActiveMenu(restaurantId: string): Promise<{ success: boolean; data?: Menu; error?: string }> {
     try {
       const menusRef = collection(db, 'menus');
@@ -268,7 +302,6 @@ export const menuApi = {
         menusRef,
         where('restaurantId', '==', restaurantId),
         where('active', '==', true),
-        orderBy('updatedAt', 'desc'),
         limit(1)
       );
       
@@ -283,7 +316,7 @@ export const menuApi = {
           name: menuData.name,
           description: menuData.description,
           active: menuData.active,
-          plates: menuData.plates || [],
+          plates: (menuData.plates || []).map((plateData: any) => normalizePlateData(plateData)),
           createdAt: menuData.createdAt,
           updatedAt: menuData.updatedAt
         };
@@ -304,46 +337,43 @@ export const menuApi = {
   // Create menu
   async createMenu(menuData: MenuCreateDTO): Promise<{ success: boolean; data?: Menu; error?: string }> {
     try {
-      // Check if restaurant exists
-      const restaurantRef = doc(db, 'restaurants', menuData.restaurantId);
-      const restaurantSnap = await getDoc(restaurantRef);
-      
-      if (!restaurantSnap.exists()) {
-        return { success: false, error: 'Restaurant not found' };
-      }
-      
       const menusRef = collection(db, 'menus');
       const now = new Date().toISOString();
       
       // Process plates if provided
-      const plates: Plate[] = menuData.plates?.map(plateDTO => {
-        const sections = createSections(plateDTO.sections);
-        const variants = generatePlateVariants(
-          plateDTO.basePrice,
-          plateDTO.baseIngredients,
-          sections
-        );
-        
-        return {
-          id: uuidv4(),
-          name: plateDTO.name,
-          description: plateDTO.description,
-          basePrice: plateDTO.basePrice,
-          baseIngredients: plateDTO.baseIngredients,
-          imageUrl: plateDTO.imageUrl,
-          active: true,
-          sections,
-          variants,
-          createdAt: now,
-          updatedAt: now
-        };
-      }) || [];
+      const plates: Plate[] = [];
+      if (menuData.plates) {
+        menuData.plates.forEach(plateDTO => {
+          const sections = createSections(plateDTO.sections);
+          const variants = generatePlateVariants(
+            plateDTO.basePrice,
+            plateDTO.baseIngredients,
+            sections
+          );
+          
+          const plate: Plate = {
+            id: uuidv4(),
+            name: plateDTO.name,
+            description: plateDTO.description,
+            basePrice: plateDTO.basePrice,
+            baseIngredients: plateDTO.baseIngredients,
+            imageUrl: plateDTO.imageUrl,
+            active: true,
+            sections,
+            variants,
+            createdAt: now,
+            updatedAt: now
+          };
+          
+          plates.push(plate);
+        });
+      }
       
       const newMenu = {
         restaurantId: menuData.restaurantId,
         name: menuData.name,
         description: menuData.description || '',
-        active: true, // New menu is active by default
+        active: true,
         plates,
         createdAt: now,
         updatedAt: now
@@ -351,12 +381,12 @@ export const menuApi = {
       
       const docRef = await addDoc(menusRef, newMenu);
       
-      const createdMenu: Menu = {
+      const menu: Menu = {
         id: docRef.id,
         ...newMenu
       };
       
-      return { success: true, data: createdMenu };
+      return { success: true, data: menu };
     } catch (error) {
       console.error('Error creating menu:', error);
       return { 
@@ -370,61 +400,32 @@ export const menuApi = {
   async updateMenu(menuId: string, updateData: MenuUpdateDTO): Promise<{ success: boolean; data?: Menu; error?: string }> {
     try {
       const menuRef = doc(db, 'menus', menuId);
+      const now = new Date().toISOString();
       
-      // Check if menu exists
-      const menuSnap = await getDoc(menuRef);
-      if (!menuSnap.exists()) {
-        return { success: false, error: 'Menu not found' };
-      }
-      
-      // If setting a menu as active, deactivate other menus for this restaurant
-      if (updateData.active === true) {
-        const menuData = menuSnap.data();
-        const menusRef = collection(db, 'menus');
-        const q = query(
-          menusRef,
-          where('restaurantId', '==', menuData.restaurantId),
-          where('active', '==', true)
-        );
-        
-        const activeMenus = await getDocs(q);
-        const updatePromises: Promise<void>[] = [];
-        
-        activeMenus.forEach((docSnap) => {
-          if (docSnap.id !== menuId) {
-            updatePromises.push(updateDoc(doc(db, 'menus', docSnap.id), {
-              active: false,
-              updatedAt: new Date().toISOString()
-            }));
-          }
-        });
-        
-        await Promise.all(updatePromises);
-      }
-      
-      const updatePayload = {
+      await updateDoc(menuRef, {
         ...updateData,
-        updatedAt: new Date().toISOString()
-      };
-      
-      await updateDoc(menuRef, updatePayload);
+        updatedAt: now
+      });
       
       // Get updated menu
-      const updatedSnap = await getDoc(menuRef);
-      const updatedData = updatedSnap.data();
-      
-      const updatedMenu: Menu = {
-        id: updatedSnap.id,
-        restaurantId: updatedData!.restaurantId,
-        name: updatedData!.name,
-        description: updatedData!.description,
-        active: updatedData!.active,
-        plates: updatedData!.plates || [],
-        createdAt: updatedData!.createdAt,
-        updatedAt: updatedData!.updatedAt
-      };
-      
-      return { success: true, data: updatedMenu };
+      const menuSnap = await getDoc(menuRef);
+      if (menuSnap.exists()) {
+        const menuData = menuSnap.data();
+        const menu: Menu = {
+          id: menuSnap.id,
+          restaurantId: menuData.restaurantId,
+          name: menuData.name,
+          description: menuData.description,
+          active: menuData.active,
+          plates: (menuData.plates || []).map((plateData: any) => normalizePlateData(plateData)),
+          createdAt: menuData.createdAt,
+          updatedAt: menuData.updatedAt
+        };
+        
+        return { success: true, data: menu };
+      } else {
+        return { success: false, error: 'Menu not found after update' };
+      }
     } catch (error) {
       console.error('Error updating menu:', error);
       return { 
@@ -462,16 +463,19 @@ export const menuApi = {
       }
       
       const menuData = menuSnap.data();
-      const now = new Date().toISOString();
+      const plates: Plate[] = menuData.plates || [];
       
-      // Create sections and generate variants
+      // Create sections with IDs
       const sections = createSections(plateData.sections);
+      
+      // Generate variants
       const variants = generatePlateVariants(
         plateData.basePrice,
         plateData.baseIngredients,
         sections
       );
       
+      const now = new Date().toISOString();
       const newPlate: Plate = {
         id: uuidv4(),
         name: plateData.name,
@@ -486,11 +490,10 @@ export const menuApi = {
         updatedAt: now
       };
       
-      // Update menu with new plate
-      const updatedPlates = [...(menuData.plates || []), newPlate];
+      plates.push(newPlate);
       
       await updateDoc(menuRef, {
-        plates: updatedPlates,
+        plates,
         updatedAt: now
       });
       
@@ -499,75 +502,85 @@ export const menuApi = {
       console.error('Error adding plate to menu:', error);
       return { 
         success: false, 
-        error: error instanceof Error ? error.message : 'Failed to add plate to menu' 
+        error: error instanceof Error ? error.message : 'Failed to add plate' 
       };
     }
   },
 
-  
   // Update plate in menu
-    async updatePlateInMenu(menuId: string, plateId: string, updateData: PlateUpdateDTO): Promise<{ success: boolean; data?: Plate; error?: string }> {
+  async updatePlateInMenu(menuId: string, plateId: string, updateData: PlateUpdateDTO): Promise<{ success: boolean; data?: Plate; error?: string }> {
     try {
-        const menuRef = doc(db, 'menus', menuId);
-        const menuSnap = await getDoc(menuRef);
-        
-        if (!menuSnap.exists()) {
+      const menuRef = doc(db, 'menus', menuId);
+      const menuSnap = await getDoc(menuRef);
+      
+      if (!menuSnap.exists()) {
         return { success: false, error: 'Menu not found' };
-        }
-        
-        const menuData = menuSnap.data();
-        const plates: Plate[] = menuData.plates || [];
-        const plateIndex = plates.findIndex(plate => plate.id === plateId);
-        
-        if (plateIndex === -1) {
+      }
+      
+      const menuData = menuSnap.data();
+      const plates: Plate[] = menuData.plates || [];
+      const plateIndex = plates.findIndex(plate => plate.id === plateId);
+      
+      if (plateIndex === -1) {
         return { success: false, error: 'Plate not found in menu' };
-        }
-        
-        const plate = plates[plateIndex];
-        const now = new Date().toISOString();
-        
-        // Handle section updates
-        let sections = plate.sections;
-        let variants = plate.variants;
-        
-        if (updateData.sections) {
+      }
+      
+      const plate = plates[plateIndex];
+      const now = new Date().toISOString();
+      
+      // Handle sections update
+      let sections = plate.sections;
+      let variants = plate.variants;
+      
+      if (updateData.sections) {
         // Convert DTOs to MenuSection with IDs
         sections = createSections(updateData.sections);
         
+        // Normalize base ingredients if provided
+        const baseIngredients = updateData.baseIngredients 
+          ? normalizeIngredients(updateData.baseIngredients as any)
+          : plate.baseIngredients;
+        
         // Regenerate variants with new sections
         variants = generatePlateVariants(
-            updateData.basePrice || plate.basePrice,
-            updateData.baseIngredients || plate.baseIngredients,
-            sections
+          updateData.basePrice || plate.basePrice,
+          baseIngredients,
+          sections
         );
-        }
-        
-        // Build updated plate
-        const updatedPlate: Plate = {
+      }
+      
+      // Normalize ingredients if updated, otherwise keep existing
+      const normalizedBaseIngredients = updateData.baseIngredients 
+        ? normalizeIngredients(updateData.baseIngredients as any)
+        : plate.baseIngredients;
+      
+      // Build updated plate
+      const updatedPlate: Plate = {
         ...plate,
         ...updateData,
-        sections, // Now definitely MenuSection[]
-        variants, // Updated variants
+        baseIngredients: normalizedBaseIngredients,
+        sections,
+        variants,
         updatedAt: now
-        };
-        
-        // Update plates array
-        plates[plateIndex] = updatedPlate;
-        
-        await updateDoc(menuRef, {
+      };
+      
+      // Update plates array
+      plates[plateIndex] = updatedPlate;
+      
+      await updateDoc(menuRef, {
         plates,
         updatedAt: now
-        });
-        
-        return { success: true, data: updatedPlate };
+      });
+      
+      return { success: true, data: updatedPlate };
     } catch (error) {
-        console.error('Error updating plate in menu:', error);
-        return { 
+      console.error('Error updating plate in menu:', error);
+      return { 
         success: false, 
         error: error instanceof Error ? error.message : 'Failed to update plate' 
-        };
+      };
     }
-    },
+  },
 
   // Delete plate from menu
   async deletePlateFromMenu(menuId: string, plateId: string): Promise<{ success: boolean; error?: string }> {
@@ -618,12 +631,14 @@ export const menuApi = {
       }
       
       const menuData = menuSnap.data();
-      const plates: Plate[] = menuData.plates || [];
-      const plate = plates.find(p => p.id === plateId);
+      const plates: any[] = menuData.plates || [];
+      const plateData = plates.find(p => p.id === plateId);
       
-      if (!plate) {
+      if (!plateData) {
         return { success: false, error: 'Plate not found' };
       }
+      
+      const plate = normalizePlateData(plateData);
       
       return { success: true, data: plate };
     } catch (error) {
@@ -678,7 +693,7 @@ export const menuApi = {
       const matchingVariant = plate.variants.find(v => v.variantKey === variantKey);
       
       // Calculate custom ingredients if no matching variant
-      let customIngredients: string[] = [];
+      let customIngredients: Ingredient[] = [];
       if (!matchingVariant) {
         customIngredients = [...plate.baseIngredients];
         
@@ -692,7 +707,13 @@ export const menuApi = {
           }
         });
         
-        customIngredients = [...new Set(customIngredients)]; // Remove duplicates
+        // Remove duplicates based on ingredient name
+        customIngredients = customIngredients.reduce((acc, ing) => {
+          if (!acc.some(i => i.name === ing.name)) {
+            acc.push(ing);
+          }
+          return acc;
+        }, [] as Ingredient[]);
       }
       
       const customizedPlate: CustomizedPlate = {
@@ -716,60 +737,60 @@ export const menuApi = {
   },
 
   // Generate menu preview with all variants
-    async generateMenuPreview(menuId: string): Promise<{ success: boolean; data?: any; error?: string }> {
+  async generateMenuPreview(menuId: string): Promise<{ success: boolean; data?: any; error?: string }> {
     try {
-        const menuResult = await this.getMenu(menuId);
-        if (!menuResult.success || !menuResult.data) {
+      const menuResult = await this.getMenu(menuId);
+      if (!menuResult.success || !menuResult.data) {
         return { success: false, error: menuResult.error };
-        }
-        
-        const menu = menuResult.data;
-        const preview = {
+      }
+      
+      const menu = menuResult.data;
+      const preview = {
         menuId: menu.id,
         menuName: menu.name,
         description: menu.description,
         restaurantId: menu.restaurantId,
         plates: menu.plates.map(plate => ({
-            id: plate.id,
-            name: plate.name,
-            description: plate.description,
-            basePrice: plate.basePrice,
-            imageUrl: plate.imageUrl,
-            active: plate.active,
-            sections: plate.sections.map(section => ({
+          id: plate.id,
+          name: plate.name,
+          description: plate.description,
+          basePrice: plate.basePrice,
+          imageUrl: plate.imageUrl,
+          active: plate.active,
+          sections: plate.sections.map(section => ({
             id: section.id,
             name: section.name,
             required: section.required,
             multiple: section.multiple,
             ingredientDependent: section.ingredientDependent,
             options: section.options.map(option => ({
-                id: option.id,
-                name: option.name,
-                additionalCost: option.additionalCost,
-                ingredients: option.ingredients || []
+              id: option.id,
+              name: option.name,
+              additionalCost: option.additionalCost,
+              ingredients: option.ingredients || []
             }))
-            })),
-            variants: plate.variants.map(variant => ({
+          })),
+          variants: plate.variants.map(variant => ({
             id: variant.id,
             variantKey: variant.variantKey,
             variantName: variant.variantName,
             price: variant.price,
             ingredients: variant.ingredients,
             active: variant.active
-            })),
-            baseIngredients: plate.baseIngredients,
-            createdAt: plate.createdAt,
-            updatedAt: plate.updatedAt
+          })),
+          baseIngredients: plate.baseIngredients,
+          createdAt: plate.createdAt,
+          updatedAt: plate.updatedAt
         }))
-        };
-        
-        return { success: true, data: preview };
+      };
+      
+      return { success: true, data: preview };
     } catch (error) {
-        console.error('Error generating menu preview:', error);
-        return { 
+      console.error('Error generating menu preview:', error);
+      return { 
         success: false, 
         error: error instanceof Error ? error.message : 'Failed to generate menu preview' 
-        };
+      };
     }
-    }
+  }
 };

@@ -2,7 +2,6 @@
 import SearchBar from '@/components/SearchBar';
 import { useAuth } from '@/context/AuthContext';
 import { useTheme } from '@/context/ThemeContext';
-import { MaterialCommunityIcons } from '@expo/vector-icons';
 import AntDesign from '@expo/vector-icons/AntDesign';
 import Feather from '@expo/vector-icons/Feather';
 import Ionicons from '@expo/vector-icons/Ionicons';
@@ -42,11 +41,12 @@ export default function CustomerLayout() {
         icon: any;
         name: string;
         iconLib: React.ComponentType<any>;
+        path: any; // Use 'any' to avoid TypeScript errors
     }
 
     const menuItems: MenuItem[] = [
-        { id: 1, icon: 'food-apple-outline', name: 'Food Preferences', iconLib: MaterialCommunityIcons },
-        { id: 2, icon: 'crown-outline', name: 'Subscriptions', iconLib: MaterialCommunityIcons },
+        { id: 1, icon: 'wallet-outline', name: 'Wallet', iconLib: Ionicons, path: '/(customer)/wallet' },
+        { id: 2, icon: 'star-outline', name: 'Subscriptions', iconLib: Ionicons, path: '/(customer)/subscriptions' },
     ];
 
     const handleLogout = async () => {
@@ -128,9 +128,13 @@ export default function CustomerLayout() {
         }
     };
 
+    const handleMenuItemPress = (path: any) => {
+        closeMenu();
+        router.push(path);
+    };
 
     const goToCart = () => {
-        router.push('/Cart'); // Navigate to Cart screen
+        router.push('/(customer)/Cart'); // Updated path
     };
 
     return (
@@ -186,7 +190,7 @@ export default function CustomerLayout() {
                     }} 
                 />
                 
-                {/* Cart screen */}
+                {/* Cart screen - make sure this file exists at app/(customer)/Cart.tsx */}
                 <Stack.Screen 
                     name="Cart" 
                     options={{ 
@@ -209,7 +213,7 @@ export default function CustomerLayout() {
                     }} 
                 />
                 
-                {/* Order History screen */}
+                {/* Order History screen - make sure this file exists at app/(customer)/OrderHistory.tsx */}
                 <Stack.Screen 
                     name="OrderHistory" 
                     options={{ 
@@ -218,7 +222,17 @@ export default function CustomerLayout() {
                         headerRight: () => null,
                     }} 
                 />
-                
+
+                {/* Subscriptions screens - these should be defined in a separate subscriptions folder */}
+                <Stack.Screen 
+                    name="subscriptions/index" 
+                    options={{ 
+                        title: "My Subscriptions",
+                        headerShown: true,
+                        headerRight: () => null,
+                    }} 
+                />
+
                 {/* Restaurants group - this will use its own layout */}
                 <Stack.Screen 
                     name="restaurants" 
@@ -226,6 +240,8 @@ export default function CustomerLayout() {
                         headerShown: false 
                     }} 
                 />
+
+                {/* You might need to add more screens here if they're not in sub-folders */}
             </Stack>
 
             {/* Overlay */}
@@ -284,13 +300,14 @@ export default function CustomerLayout() {
                             activeOpacity={0.7}
                             onPress={() => {
                                 closeMenu();
-                                router.push('/'); // Navigate to home
+                                router.push('/(customer)'); // Navigate to home
                             }}
                         >
                             <Ionicons name="home-outline" style={styles.menuItemIcon} />
                             <Text style={styles.menuItemText}>Home</Text>
                         </TouchableOpacity>
                         
+                        {/* Menu items from array */}
                         {menuItems.map((item) => {
                             const IconComponent = item.iconLib;
                             return (
@@ -298,10 +315,7 @@ export default function CustomerLayout() {
                                     key={item.id}
                                     style={styles.menuItem}
                                     activeOpacity={0.7}
-                                    onPress={() => {
-                                        console.log(`${item.name} pressed`);
-                                        closeMenu();
-                                    }}
+                                    onPress={() => handleMenuItemPress(item.path)}
                                 >
                                     <IconComponent
                                         name={item.icon}
@@ -318,10 +332,10 @@ export default function CustomerLayout() {
                             activeOpacity={0.7}
                             onPress={() => {
                                 closeMenu();
-                                goToCart(); // Navigate to cart
+                                router.push('/(customer)/Cart'); // Navigate to cart
                             }}
                         >
-                            <Feather name="shopping-cart" style={styles.menuItemIcon} />
+                            <Ionicons name="cart-outline" style={styles.menuItemIcon} />
                             <Text style={styles.menuItemText}>Cart</Text>
                         </TouchableOpacity>
                         
@@ -331,7 +345,7 @@ export default function CustomerLayout() {
                             activeOpacity={0.7}
                             onPress={() => {
                                 closeMenu();
-                                router.push('/OrderHistory'); // Navigate to order history
+                                router.push('/(customer)/OrderHistory'); // Navigate to order history
                             }}
                         >
                             <Ionicons name="receipt-outline" style={styles.menuItemIcon} />

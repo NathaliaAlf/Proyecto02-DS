@@ -24,6 +24,8 @@ export default function RestaurantDetailScreen() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
+  const isSubscribed = false;
+
   useEffect(() => {
     loadRestaurantData();
   }, [restaurantId]);
@@ -65,6 +67,17 @@ export default function RestaurantDetailScreen() {
       setLoading(false);
     }
   };
+
+  const handleSubscribePress = () => {
+    if (isSubscribed){
+      //show message to confirm cancelation
+    }else{
+      router.push({
+        pathname: "/subscriptions/[restaurantId]",
+        params: { restaurantId, categoryId }
+      });
+    }
+  }
 
   const handlePlatePress = (plate: Plate) => {
     // Navigate to plate detail screen (you can create this later)
@@ -144,6 +157,14 @@ export default function RestaurantDetailScreen() {
           {restaurant?.restaurantName || restaurantName}
         </Text>
       </View>
+      <TouchableOpacity style={
+          isSubscribed ?
+          styles.subscribedButton :
+          styles.subscribeButton
+        }
+        onPress={handleSubscribePress} >
+        <Text style={styles.subcribeText}>{isSubscribed? 'Unsubscribe' : 'Subscribe'}</Text>
+      </TouchableOpacity>
 
       {/* Plates List */}
       {plates.length === 0 ? (
@@ -227,6 +248,27 @@ const createStyles = (colors: any) => StyleSheet.create({
     fontWeight: 'bold',
     color: colors.text,
     flex: 1,
+  },
+  subscribeButton: {
+    backgroundColor: colors.second,
+    width: 150,
+    alignContent: 'center',
+    margin: 20,
+    borderRadius: 10,
+  },
+  subscribedButton:{
+    width: 150,
+    alignContent: 'center',
+    margin: 20,
+    borderRadius: 10,
+    borderColor: colors.defaultColor,
+    borderWidth: 2,
+  },
+  subcribeText: {
+    fontSize: 15,
+    fontWeight: 700,
+    margin: 'auto',
+    padding: 5,
   },
   platesList: {
     paddingHorizontal: 15,

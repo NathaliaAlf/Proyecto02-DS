@@ -1,5 +1,7 @@
 // types/customer.ts
 
+import { Ingredient } from "./menu";
+
 export interface Customer {
   id: string;
   uid: string; // Reference to auth UID
@@ -65,15 +67,47 @@ export interface CartItem {
   menuId: string;
   plateId: string;
   plateName: string;
-  variantId?: string | null; // Allow null
-  customIngredients?: string[] | null; // Allow null
+  variantId?: string | null;
+  customIngredients?: Ingredient[] | null;
   selectedOptions: SelectedOption[];
   quantity: number;
   price: number;
-  imageUrl?: string | null; // Allow null
+  imageUrl?: string | null;
   restaurantId: string;
   restaurantName: string;
   addedAt: string;
+  notes?: string;
+  
+  plateDetails?: {
+    // Original plate data
+    basePrice: number;
+    description: string;
+    baseIngredients: Ingredient[];
+    sections: Array<{
+      id: string;
+      name: string;
+      required: boolean;
+      multiple: boolean;
+      ingredientDependent: boolean;
+      options: Array<{
+        id: string;
+        name: string;
+        additionalCost: number;
+        ingredients?: Ingredient[];
+      }>;
+    }>;
+    
+    // User's customization state
+    customizationState: {
+      removedIngredients: string[]; // Array of ingredient names that were removed
+      selectedOptions: Record<string, string[]>; // sectionId -> optionIds[]
+      quantity: number;
+      notes: string;
+    };
+    
+    // Current ingredients after customization
+    currentIngredients: Ingredient[];
+  };
 }
 
 export interface SelectedOption {
@@ -119,6 +153,7 @@ export interface OrderItem {
   quantity: number;
   price: number;
   imageUrl?: string;
+  notes?: string;
 }
 
 export interface Order {

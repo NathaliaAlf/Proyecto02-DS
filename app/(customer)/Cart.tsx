@@ -92,7 +92,8 @@ export default function CartScreen() {
         
         {item.customIngredients && item.customIngredients.length > 0 && (
           <Text style={styles.ingredientsText}>
-            Custom ingredients: {item.customIngredients.join(', ')}
+            Custom ingredients: {" "}
+            {item.customIngredients.map(ingredient => ingredient.name).join(", ")}
           </Text>
         )}
         
