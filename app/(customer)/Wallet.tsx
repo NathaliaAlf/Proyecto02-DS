@@ -3,11 +3,8 @@ import {
     View,
     Text,
     StyleSheet,
-    SafeAreaView,
     TouchableOpacity,
-    ScrollView,
-    StatusBar,
-    Platform
+    ScrollView
 } from 'react-native';
 // Assuming Expo or standard vector icons library is available
 import { Ionicons } from '@expo/vector-icons';
@@ -57,35 +54,18 @@ export default function WalletScreen() {
     };
 
     return (
-        <SafeAreaView style={styles.container}>
-            <StatusBar barStyle="dark-content" />
-
+        <View style={styles.container}>
             <ScrollView contentContainerStyle={styles.scrollContent}>
-
-                {/* Header Section */}
-                <View style={styles.header}>
-                    <TouchableOpacity style={styles.backButton}>
-                        <Ionicons name="arrow-back" size={24} color="#000" />
-                    </TouchableOpacity>
-                    {/* Typography based on your 'Pasta' image reference */}
-                    <Text style={styles.screenTitle}>Wallet</Text>
-                </View>
 
                 {/* Balance Card */}
                 <View style={styles.card}>
                     <View style={styles.cardHeader}>
-                        <Text style={styles.cardLabel}>Balances</Text>
+                        <Text style={styles.cardLabel}>Uber balances</Text>
                     </View>
 
                     <View style={styles.balanceRow}>
                         <Text style={styles.currency}>CRC</Text>
                         <Text style={styles.balanceAmount}>0.00</Text>
-                        <Ionicons name="chevron-forward" size={20} color="#000" style={styles.balanceChevron} />
-                    </View>
-
-                    <View style={styles.infoRow}>
-                        <Ionicons name="information-circle-outline" size={18} color="#000" />
-                        <Text style={styles.infoText}>Auto-refill is off</Text>
                     </View>
 
                     <TouchableOpacity style={styles.addFundsButton}>
@@ -114,7 +94,7 @@ export default function WalletScreen() {
                 </View>
 
             </ScrollView>
-        </SafeAreaView>
+        </View>
     );
 }
 
@@ -123,29 +103,11 @@ const styles = StyleSheet.create({
     container: {
         flex: 1,
         backgroundColor: '#FFF',
-        paddingTop: Platform.OS === 'android' ? 25 : 0,
     },
     scrollContent: {
         paddingHorizontal: 20,
         paddingBottom: 40,
-    },
-
-    // Header
-    header: {
-        marginBottom: 20,
-        marginTop: 10,
-    },
-    backButton: {
-        marginBottom: 16,
-        alignSelf: 'flex-start',
-    },
-    screenTitle: {
-        // Specific specs from the 'Pasta' image
-        fontFamily: 'Inter', // Ensure this font is loaded in your project
-        fontWeight: '700',
-        fontSize: 32,
-        lineHeight: 38, // Adjusted slightly for RN rendering
-        color: '#000',
+        paddingTop: 20,
     },
 
     // Balance Card
