@@ -22,7 +22,7 @@ import {
   TouchableOpacity,
   View
 } from 'react-native';
-import { Checkbox } from 'react-native-paper';
+import { Checkbox, RadioButton } from 'react-native-paper';
 
 export default function PlateDetailScreen() {
   const { colors } = useTheme();
@@ -587,13 +587,24 @@ export default function PlateDetailScreen() {
                       onPress={() => toggleOption(section.id, option.id, section.multiple)}
                       disabled={section.required && section.options.length === 1}
                     >
-                      <Checkbox.Android
-                        status={isSelected ? 'checked' : 'unchecked'}
-                        onPress={() => toggleOption(section.id, option.id, section.multiple)}
-                        disabled={section.required && section.options.length === 1}
-                        color={colors.defaultColor}
-                        uncheckedColor={colors.defaultColor}
-                      />
+                      {section.multiple ? (
+                        <Checkbox.Android
+                          status={isSelected ? 'checked' : 'unchecked'}
+                          onPress={() => toggleOption(section.id, option.id, section.multiple)}
+                          disabled={section.required && section.options.length === 1}
+                          color={colors.defaultColor}
+                          uncheckedColor={colors.defaultColor}
+                        />
+                      ) : (
+                        <RadioButton.Android
+                          value={option.id}
+                          status={isSelected ? 'checked' : 'unchecked'}
+                          onPress={() => toggleOption(section.id, option.id, section.multiple)}
+                          disabled={section.required && section.options.length === 1}
+                          color={colors.defaultColor}
+                          uncheckedColor={colors.defaultColor}
+                        />
+                      )}
                       
                       <View style={styles.optionInfo}>
                         <View style={styles.optionHeader}>

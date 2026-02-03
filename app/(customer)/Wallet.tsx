@@ -9,6 +9,7 @@ import {
     StatusBar,
     Platform
 } from 'react-native';
+// Assuming Expo or standard vector icons library is available
 import { Ionicons } from '@expo/vector-icons';
 
 // --- Types ---
@@ -31,6 +32,7 @@ const PAYMENT_METHODS: PaymentMethod[] = [
 
 export default function WalletScreen() {
 
+    // Helper to render the specific logo styles based on type
     const renderIcon = (type: PaymentType) => {
         switch (type) {
             case 'visa':
@@ -60,12 +62,16 @@ export default function WalletScreen() {
 
             <ScrollView contentContainerStyle={styles.scrollContent}>
 
-                {/* Header Section - Arrow Removed */}
+                {/* Header Section */}
                 <View style={styles.header}>
+                    <TouchableOpacity style={styles.backButton}>
+                        <Ionicons name="arrow-back" size={24} color="#000" />
+                    </TouchableOpacity>
+                    {/* Typography based on your 'Pasta' image reference */}
                     <Text style={styles.screenTitle}>Wallet</Text>
                 </View>
 
-                {/* Balance Card - Auto-refill Removed */}
+                {/* Balance Card */}
                 <View style={styles.card}>
                     <View style={styles.cardHeader}>
                         <Text style={styles.cardLabel}>Balances</Text>
@@ -75,6 +81,11 @@ export default function WalletScreen() {
                         <Text style={styles.currency}>CRC</Text>
                         <Text style={styles.balanceAmount}>0.00</Text>
                         <Ionicons name="chevron-forward" size={20} color="#000" style={styles.balanceChevron} />
+                    </View>
+
+                    <View style={styles.infoRow}>
+                        <Ionicons name="information-circle-outline" size={18} color="#000" />
+                        <Text style={styles.infoText}>Auto-refill is off</Text>
                     </View>
 
                     <TouchableOpacity style={styles.addFundsButton}>
@@ -122,19 +133,24 @@ const styles = StyleSheet.create({
     // Header
     header: {
         marginBottom: 20,
-        marginTop: 40, // Increased slightly since arrow is gone
+        marginTop: 10,
+    },
+    backButton: {
+        marginBottom: 16,
+        alignSelf: 'flex-start',
     },
     screenTitle: {
-        fontFamily: 'Inter',
+        // Specific specs from the 'Pasta' image
+        fontFamily: 'Inter', // Ensure this font is loaded in your project
         fontWeight: '700',
         fontSize: 32,
-        lineHeight: 38,
+        lineHeight: 38, // Adjusted slightly for RN rendering
         color: '#000',
     },
 
     // Balance Card
     card: {
-        backgroundColor: '#F3F3F3',
+        backgroundColor: '#F3F3F3', // Light gray card background
         borderRadius: 16,
         padding: 24,
         marginBottom: 32,
@@ -155,7 +171,7 @@ const styles = StyleSheet.create({
     balanceRow: {
         flexDirection: 'row',
         alignItems: 'baseline',
-        marginBottom: 32, // Increased margin to separate balance from button
+        marginBottom: 16,
     },
     currency: {
         fontSize: 32,
@@ -166,12 +182,23 @@ const styles = StyleSheet.create({
     balanceAmount: {
         fontSize: 32,
         fontWeight: '700',
-        fontFamily: 'monospace',
+        fontFamily: 'monospace', // Gives that specific digit look
         color: '#000',
     },
     balanceChevron: {
         marginLeft: 'auto',
         alignSelf: 'center',
+    },
+    infoRow: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        marginBottom: 24,
+    },
+    infoText: {
+        marginLeft: 8,
+        fontSize: 14,
+        color: '#000',
+        fontWeight: '400',
     },
     addFundsButton: {
         backgroundColor: '#000',
@@ -181,7 +208,7 @@ const styles = StyleSheet.create({
         justifyContent: 'center',
         paddingVertical: 14,
         paddingHorizontal: 20,
-        alignSelf: 'flex-start',
+        alignSelf: 'flex-start', // Pill shape sizing
     },
     addFundsText: {
         color: '#FFF',
@@ -222,7 +249,7 @@ const styles = StyleSheet.create({
         marginTop: 2,
     },
 
-    // Icons Logic
+    // Icons Logic (Visual Proxies)
     iconBase: {
         width: 40,
         height: 26,
@@ -230,8 +257,9 @@ const styles = StyleSheet.create({
         justifyContent: 'center',
         alignItems: 'center',
     },
+    // Visa Look
     iconVisa: {
-        backgroundColor: '#1A1F71',
+        backgroundColor: '#1A1F71', // Visa Blue
     },
     iconTextVisa: {
         color: '#FFF',
@@ -239,6 +267,7 @@ const styles = StyleSheet.create({
         fontWeight: '900',
         letterSpacing: 0.5,
     },
+    // Paypal Look
     iconPaypal: {
         backgroundColor: '#F3F3F3',
         borderWidth: 1,
@@ -250,6 +279,7 @@ const styles = StyleSheet.create({
         fontWeight: '900',
         fontStyle: 'italic',
     },
+    // Cash Look
     iconCash: {
         backgroundColor: '#6AB04C',
     },

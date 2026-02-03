@@ -1,261 +1,219 @@
 // components/OrderHistory.tsx
 import { useOrders } from '@/hooks/useOrders';
-import { Order, OrderStatus } from '@/types/customer';
+import { Order } from '@/types/customer';
+import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import React, { useEffect } from 'react';
 import {
-    FlatList,
-    StyleSheet,
-    Text,
-    TouchableOpacity,
-    View
+  FlatList,
+  Image,
+  StyleSheet,
+  Text,
+  TouchableOpacity,
+  View
 } from 'react-native';
 
-const STATUS_COLORS: Record<OrderStatus, string> = {
-  pending: '#FFA500',
-  confirmed: '#2196F3',
-  preparing: '#4CAF50',
-  ready: '#8BC34A',
-  out_for_delivery: '#3F51B5',
-  delivered: '#009688',
-  cancelled: '#F44336'
-};
-
-const STATUS_LABELS: Record<OrderStatus, string> = {
+const STATUS_LABELS: Record<string, string> = {
   pending: 'Pending',
   confirmed: 'Confirmed',
   preparing: 'Preparing',
   ready: 'Ready',
   out_for_delivery: 'Out for Delivery',
-  delivered: 'Delivered',
+  delivered: 'Completed', // Matched "Completed" from screenshot
   cancelled: 'Cancelled'
 };
 
-export function OrderHistory() {
+export default function OrderHistory() {
   const { orders, loading, error, loadOrders } = useOrders();
+  const router = useRouter();
 
   useEffect(() => {
     loadOrders(10);
   }, []);
 
-  const renderOrderItem = ({ item }: { item: Order }) => (
-    <TouchableOpacity style={styles.orderItem}>
-      <View style={styles.orderHeader}>
-        <View>
-          <Text style={styles.orderNumber}>{item.orderNumber}</Text>
-          <Text style={styles.restaurantName}>{item.restaurantName}</Text>
-        </View>
-        <View style={[styles.statusBadge, { backgroundColor: STATUS_COLORS[item.status] }]}>
-          <Text style={styles.statusText}>{STATUS_LABELS[item.status]}</Text>
-        </View>
-      </View>
-      
-      <Text style={styles.orderDate}>
-        {new Date(item.createdAt).toLocaleDateString()} • {new Date(item.createdAt).toLocaleTimeString()}
-      </Text>
-      
-      <View style={styles.itemsContainer}>
-        {item.items.slice(0, 2).map((orderItem, idx) => (
-          <Text key={idx} style={styles.itemText}>
-            {orderItem.quantity}x {orderItem.plateName}
-          </Text>
-        ))}
-        {item.items.length > 2 && (
-          <Text style={styles.moreItemsText}>
-            +{item.items.length - 2} more items
-          </Text>
-        )}
-      </View>
-      
-      <View style={styles.orderFooter}>
-        <View style={styles.deliveryInfo}>
-          <Ionicons name="location-outline" size={16} color="#666" />
-          <Text style={styles.deliveryText}>
-            {item.deliveryAddress.address.split(',')[0]}
-          </Text>
-        </View>
-        <Text style={styles.totalAmount}>${item.total.toFixed(2)}</Text>
-      </View>
-    </TouchableOpacity>
-  );
+  const formatDate = (dateString: string) => {
+    const date = new Date(dateString);
+    // Formats to "Jan 31"
+    return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+  };
+
+  const renderOrderItem = ({ item }: { item: Order }) => {
+    const imageSource = { uri: 'https://via.placeholder.com/150' };
+
+    return (
+        <TouchableOpacity
+            style={styles.itemContainer}
+            onPress={() => router.push({ pathname: '/(customer)/OrderHistoryDetail', params: { orderId: item.orderId } })}
+        >
+          {/* Left: Image */}
+          <Image source={imageSource} style={styles.itemImage} />
+
+          {/* Middle: Info */}
+          <View style={styles.infoContainer}>
+            {/* Using clientName as main title */}
+            <Text style={styles.mainTitle} numberOfLines={1}>
+              {item.clientName}
+            </Text>
+
+            {/* Location or Secondary Info (using address) */}
+            <Text style={styles.subTitle} numberOfLines={1}>
+              {item.address}
+            </Text>
+
+            {/* Details: Items • Price */}
+            <Text style={styles.detailsText}>
+              {item.plates.length} {item.plates.length === 1 ? 'item' : 'items'} • CRC {item.totalAmount.toLocaleString('en-CR', { minimumFractionDigits: 2 })}
+            </Text>
+
+            {/* Date • Status */}
+            <Text style={styles.statusLine}>
+              {formatDate(item.createdAt)} • {STATUS_LABELS[item.status] || item.status}
+            </Text>
+          </View>
+
+          {/* Right: Reorder Button */}
+          <TouchableOpacity style={styles.reorderButton}>
+            <Text style={styles.reorderText}>Reorder</Text>
+          </TouchableOpacity>
+        </TouchableOpacity>
+    );
+  };
 
   if (loading && orders.length === 0) {
     return (
-      <View style={styles.container}>
-        <Text>Loading orders...</Text>
-      </View>
+        <View style={styles.centerContainer}>
+          <Text>Loading orders...</Text>
+        </View>
     );
   }
 
   if (error) {
     return (
-      <View style={styles.container}>
-        <Text style={styles.errorText}>{error}</Text>
-        <TouchableOpacity style={styles.retryButton} onPress={() => loadOrders(10)}>
-          <Text>Retry</Text>
-        </TouchableOpacity>
-      </View>
-    );
-  }
-
-  if (orders.length === 0) {
-    return (
-      <View style={styles.container}>
-        <Ionicons name="receipt-outline" size={64} color="#ccc" />
-        <Text style={styles.emptyText}>No orders yet</Text>
-        <Text style={styles.emptySubtext}>Your order history will appear here</Text>
-      </View>
+        <View style={styles.centerContainer}>
+          <Text style={styles.errorText}>{error}</Text>
+          <TouchableOpacity onPress={() => loadOrders(10)}>
+            <Text style={styles.retryText}>Retry</Text>
+          </TouchableOpacity>
+        </View>
     );
   }
 
   return (
-    <View style={styles.container}>
-      <View style={styles.header}>
-        <Text style={styles.title}>Order History</Text>
-        <TouchableOpacity onPress={() => loadOrders()}>
-          <Text style={styles.viewAll}>View All</Text>
-        </TouchableOpacity>
+      <View style={styles.container}>
+        {/* Header specifically styled per Figma specs */}
+        <View style={styles.headerContainer}>
+          <Text style={styles.headerTitle}>Orders</Text>
+        </View>
+
+        <FlatList
+            data={orders}
+            renderItem={renderOrderItem}
+            keyExtractor={item => item.orderId}
+            contentContainerStyle={styles.listContent}
+            showsVerticalScrollIndicator={false}
+            ItemSeparatorComponent={() => <View style={styles.separator} />}
+        />
       </View>
-      
-      <FlatList
-        data={orders}
-        renderItem={renderOrderItem}
-        keyExtractor={item => item.id}
-        contentContainerStyle={styles.listContainer}
-        showsVerticalScrollIndicator={false}
-      />
-    </View>
   );
 }
 
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#f5f5f5',
+    backgroundColor: '#fff', // White background
   },
-  header: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
+  centerContainer: {
+    flex: 1,
+    justifyContent: 'center',
     alignItems: 'center',
-    padding: 16,
-    backgroundColor: 'white',
-    borderBottomWidth: 1,
-    borderBottomColor: '#eee',
+    backgroundColor: '#fff',
   },
-  title: {
-    fontSize: 20,
-    fontWeight: 'bold',
+  // Header Typography per Screenshot 2 settings
+  headerContainer: {
+    paddingHorizontal: 20,
+    paddingTop: 60, // Adjust for status bar
+    paddingBottom: 20,
+    backgroundColor: '#fff',
   },
-  viewAll: {
-    color: '#ff6b35',
-    fontSize: 14,
-    fontWeight: '600',
+  headerTitle: {
+    fontFamily: 'Inter', // Ensure Inter font is loaded in your project
+    fontWeight: '700',   // Bold
+    fontSize: 32,
+    lineHeight: 32,      // 100% line height
+    color: '#000000',
   },
-  listContainer: {
-    padding: 16,
-    paddingBottom: 32,
+  // List Styles
+  listContent: {
+    paddingBottom: 20,
   },
-  orderItem: {
-    backgroundColor: 'white',
-    borderRadius: 12,
-    padding: 16,
-    marginBottom: 12,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
-    elevation: 3,
-  },
-  orderHeader: {
+  itemContainer: {
     flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'flex-start',
-    marginBottom: 8,
+    paddingVertical: 16,
+    paddingHorizontal: 20,
+    alignItems: 'center',
+    backgroundColor: '#fff',
   },
-  orderNumber: {
-    fontSize: 14,
-    fontWeight: '600',
-    color: '#333',
+  itemImage: {
+    width: 60,
+    height: 60,
+    borderRadius: 30, // Circular image
+    backgroundColor: '#eee',
+    marginRight: 16,
   },
-  restaurantName: {
+  infoContainer: {
+    flex: 1,
+    justifyContent: 'center',
+  },
+  mainTitle: {
     fontSize: 16,
-    fontWeight: 'bold',
-    color: '#333',
-    marginTop: 2,
-  },
-  statusBadge: {
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    borderRadius: 12,
-  },
-  statusText: {
-    color: 'white',
-    fontSize: 10,
-    fontWeight: '600',
-  },
-  orderDate: {
-    fontSize: 12,
-    color: '#666',
-    marginBottom: 12,
-  },
-  itemsContainer: {
-    marginBottom: 12,
-  },
-  itemText: {
-    fontSize: 13,
-    color: '#333',
+    fontWeight: '700',
+    color: '#000',
     marginBottom: 2,
+    fontFamily: 'Inter',
   },
-  moreItemsText: {
-    fontSize: 12,
-    color: '#666',
-    fontStyle: 'italic',
-    marginTop: 4,
-  },
-  orderFooter: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    borderTopWidth: 1,
-    borderTopColor: '#eee',
-    paddingTop: 12,
-  },
-  deliveryInfo: {
-    flexDirection: 'row',
-    alignItems: 'center',
-  },
-  deliveryText: {
-    fontSize: 12,
-    color: '#666',
-    marginLeft: 4,
-  },
-  totalAmount: {
+  subTitle: {
     fontSize: 16,
-    fontWeight: 'bold',
-    color: '#ff6b35',
+    fontWeight: '700', // The screenshot has the second line also bold/dark
+    color: '#000',
+    marginBottom: 4,
+    fontFamily: 'Inter',
   },
-  emptyText: {
-    fontSize: 18,
-    fontWeight: 'bold',
-    marginTop: 16,
-    color: '#666',
-    textAlign: 'center',
-  },
-  emptySubtext: {
+  detailsText: {
     fontSize: 14,
-    color: '#999',
-    marginTop: 8,
-    textAlign: 'center',
+    color: '#666',
+    marginBottom: 2,
+    fontFamily: 'Inter',
+  },
+  statusLine: {
+    fontSize: 14,
+    color: '#666',
+    fontFamily: 'Inter',
+  },
+  // Reorder Button
+  reorderButton: {
+    backgroundColor: '#F2F2F2', // Light gray background
+    paddingVertical: 8,
+    paddingHorizontal: 16,
+    borderRadius: 20,
+    marginLeft: 8,
+  },
+  reorderText: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#000',
+    fontFamily: 'Inter',
+  },
+  separator: {
+    height: 1,
+    backgroundColor: '#EEEEEE',
+    marginLeft: 96, // Indent separator to align with text, optional
   },
   errorText: {
-    color: '#ff4444',
-    textAlign: 'center',
-    marginBottom: 16,
+    color: 'red',
+    marginBottom: 10,
   },
-  retryButton: {
-    backgroundColor: '#4CAF50',
-    padding: 12,
-    borderRadius: 8,
-    alignItems: 'center',
-  },
+  retryText: {
+    color: '#007AFF',
+    fontWeight: '600',
+  }
 });

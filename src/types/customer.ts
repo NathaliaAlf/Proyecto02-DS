@@ -114,7 +114,7 @@ export interface SelectedOption {
   sectionId: string;
   sectionName: string;
   optionId: string;
-  optionName: string;
+  optionName:string;
   additionalCost: number;
 }
 
@@ -143,55 +143,44 @@ export type OrderStatus =
   | 'delivered' 
   | 'cancelled';
 
+  export interface PlateSectionOption {
+    description: string;
+    extraPrice: number;
+    id: string;
+    name: string;
+    updatedAt?: string;
+}
+
+export interface PlateSection {
+    createdAt: string;
+    description: string;
+    id: string;
+    name: string;
+    options: PlateSectionOption[];
+}
+
 export interface OrderItem {
-  id: string;
-  plateId: string;
-  plateName: string;
-  variantId?: string;
-  customIngredients?: string[];
-  selectedOptions: SelectedOption[];
-  quantity: number;
-  price: number;
-  imageUrl?: string;
-  notes?: string;
+    active: boolean;
+    baseIngredients: string[];
+    basePrice: number;
+    createdAt: string;
+    description: string;
+    id: string;
+    name: string;
+    optionalIngredients: string[];
+    updatedAt: string;
+    section: PlateSection[];
 }
 
 export interface Order {
-  id: string;
-  orderNumber: string;
-  customerId: string;
-  customerName: string;
-  customerPhone?: string;
-  restaurantId: string;
-  restaurantName: string;
-  deliveryAddress: DeliveryAddress;
-  items: OrderItem[];
-  subtotal: number;
-  deliveryFee: number;
-  tax: number;
-  total: number;
-  status: OrderStatus;
-  estimatedDeliveryTime?: string;
-  actualDeliveryTime?: string;
-  paymentMethod: string;
-  paymentStatus: 'pending' | 'paid' | 'refunded';
-  specialInstructions?: string;
+  address: string;
+  clientName: string;
   createdAt: string;
-  updatedAt: string;
-}
-
-export interface OrderCreateDTO {
-  customerId: string;
+  orderId: string;
+  plates: OrderItem[];
   restaurantId: string;
-  deliveryAddress: DeliveryAddress;
-  items: Omit<OrderItem, 'id'>[];
-  paymentMethod: string;
-  specialInstructions?: string;
-}
-
-export interface OrderUpdateDTO {
-  status?: OrderStatus;
-  estimatedDeliveryTime?: string;
-  actualDeliveryTime?: string;
-  paymentStatus?: 'pending' | 'paid' | 'refunded';
+  totalAmount: number;
+  updatedAt: string;
+  status: OrderStatus;
+  restaurantName?: string;
 }
