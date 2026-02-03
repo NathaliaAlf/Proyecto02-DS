@@ -336,7 +336,9 @@ export const customerApi = {
             imageUrl: item.imageUrl || null,
             restaurantId: item.restaurantId || cartData.restaurantId || '',
             restaurantName: item.restaurantName || cartData.restaurantName || '',
-            addedAt: item.addedAt || new Date().toISOString()
+            addedAt: item.addedAt || new Date().toISOString(),
+            notes: item.notes || '', // Add this line
+            plateDetails: item.plateDetails || undefined // Add this line
           })) : [],
           active: cartData.active !== undefined ? cartData.active : true,
           deliveryFee: cartData.deliveryFee || 0,
@@ -403,9 +405,11 @@ export const customerApi = {
       const cartsRef = collection(db, 'shoppingCarts');
       const now = new Date().toISOString();
 
-      const sanitizedCartItem = Object.fromEntries(
-        Object.entries(cartItem).filter(([_, value]) => value !== undefined)
-      );
+      const sanitizedCartItem = {
+        ...cartItem,
+        notes: cartItem.notes || '',
+        plateDetails: cartItem.plateDetails || undefined
+      };
       
       return await runTransaction(db, async (transaction) => {
         // Get active cart
@@ -447,16 +451,17 @@ export const customerApi = {
               plateId: cartItem.plateId || '',
               plateName: cartItem.plateName || '',
               menuId: cartItem.menuId || '',
-              variantId: cartItem.variantId || null, 
-              customIngredients: cartItem.customIngredients || [], 
-              selectedOptions: cartItem.selectedOptions || [], 
+              variantId: cartItem.variantId || null,
+              customIngredients: cartItem.customIngredients || [],
+              selectedOptions: cartItem.selectedOptions || [],
               quantity: cartItem.quantity || 1,
               price: cartItem.price || 0,
-              imageUrl: cartItem.imageUrl || null, 
+              imageUrl: cartItem.imageUrl || null,
               restaurantId: cartItem.restaurantId || '',
               restaurantName: cartItem.restaurantName || '',
               addedAt: now,
-              notes: cartItem.notes || ''
+              notes: cartItem.notes || '', 
+              plateDetails: cartItem.plateDetails
             };
             cartData.items.push(newItem);
           }
@@ -488,7 +493,7 @@ export const customerApi = {
             plateId: cartItem.plateId || '',
             plateName: cartItem.plateName || '',
             menuId: cartItem.menuId || '',
-            variantId: cartItem.variantId || null, // Use null instead of undefined
+            variantId: cartItem.variantId || null,
             customIngredients: cartItem.customIngredients || [],
             selectedOptions: cartItem.selectedOptions || [],
             quantity: cartItem.quantity || 1,
@@ -496,7 +501,9 @@ export const customerApi = {
             imageUrl: cartItem.imageUrl || null,
             restaurantId: cartItem.restaurantId || '',
             restaurantName: cartItem.restaurantName || '',
-            addedAt: now
+            addedAt: now,
+            notes: cartItem.notes || '',
+            plateDetails: cartItem.plateDetails
           };
           
           // Create clean cart data with no undefined values

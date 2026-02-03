@@ -329,11 +329,44 @@ export default function PlateDetailScreen() {
         restaurantName,
         customizedPlate.finalPrice / quantity,
         quantity,
-        getSelectedOptionDetails(),
+        getSelectedOptionDetails().map(option => ({
+          ...option,
+          ingredientDependent: plate.sections.find(s => s.id === option.sectionId)?.ingredientDependent || false,
+          optionIngredients: plate.sections
+            .find(s => s.id === option.sectionId)
+            ?.options.find(o => o.id === option.optionId)
+            ?.ingredients || []
+        })),
         customizedPlate.variantId,
-        filteredIngredients, 
+        filteredIngredients,
         plate.imageUrl,
-        notes.trim()
+        notes.trim(),
+        // NEW: Add plate details
+        {
+          basePrice: plate.basePrice,
+          description: plate.description,
+          baseIngredients: plate.baseIngredients,
+          sections: plate.sections.map(section => ({
+            id: section.id,
+            name: section.name,
+            required: section.required,
+            multiple: section.multiple,
+            ingredientDependent: section.ingredientDependent,
+            options: section.options.map(option => ({
+              id: option.id,
+              name: option.name,
+              additionalCost: option.additionalCost,
+              ingredients: option.ingredients || []
+            }))
+          })),
+          customizationState: {
+            removedIngredients: Array.from(removedIngredients),
+            selectedOptions: { ...selectedOptions },
+            quantity,
+            notes: notes.trim()
+          },
+          currentIngredients: getFilteredIngredientsForCart()
+        }
       );
       
       if (result) {
