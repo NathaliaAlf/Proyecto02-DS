@@ -97,6 +97,15 @@ export default function SubscriptionsScreen() {
     loadSubscriptions();
   };
 
+    const handleSubscriptionPress = (subscription: Subscription) => {
+    // Navigate to subscription details screen with subscription ID
+    router.push({
+        pathname: '/(customer)/subscriptions/details/[subscriptionId]',
+        params: { subscriptionId: subscription.id }
+    });
+    };
+
+
   const handleCancelSubscription = (subscription: Subscription) => {
     Alert.alert(
       'Cancel Subscription',
@@ -134,42 +143,46 @@ export default function SubscriptionsScreen() {
     router.push('/(customer)');
   };
 
-  const renderSubscriptionItem = ({ item }: { item: Subscription }) => {
+    const renderSubscriptionItem = ({ item }: { item: Subscription }) => {
     const imageUrl = restaurantImages[item.restaurantId];
     
     return (
-      <View style={styles.subscriptionItem}>
+        <TouchableOpacity
+        style={styles.subscriptionItem}
+        onPress={() => handleSubscriptionPress(item)}
+        activeOpacity={0.7}
+        >
         {/* Profile Picture Circle */}
         <View style={styles.imageContainer}>
-          {imageUrl ? (
+            {imageUrl ? (
             <Image 
-              source={{ uri: imageUrl }} 
-              style={styles.restaurantImage}
-              resizeMode="cover"
+                source={{ uri: imageUrl }} 
+                style={styles.restaurantImage}
+                resizeMode="cover"
             />
-          ) : (
+            ) : (
             <View style={styles.defaultImage}>
-              <Ionicons name="restaurant-outline" size={24} color={colors.second} />
+                <Ionicons name="restaurant-outline" size={24} color={colors.second} />
             </View>
-          )}
+            )}
         </View>
         
         {/* Restaurant Name */}
         <Text style={styles.restaurantName} numberOfLines={1}>
-          {item.restaurantName}
+            {item.restaurantName}
         </Text>
         
         {/* Trash Can on the Right */}
         <TouchableOpacity
-          style={styles.deleteButton}
-          onPress={() => handleCancelSubscription(item)}
-          hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+            style={styles.deleteButton}
+            onPress={() => handleCancelSubscription(item)}
+            hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
         >
-          <MaterialIcons name="delete-outline" size={24} color="#EF4444" />
+            <MaterialIcons name="delete-outline" size={24} color="#EF4444" />
         </TouchableOpacity>
-      </View>
+        </TouchableOpacity>
     );
-  };
+    };
 
   if (loading && !refreshing) {
     return (

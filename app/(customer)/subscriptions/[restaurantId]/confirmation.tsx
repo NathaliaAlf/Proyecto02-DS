@@ -324,14 +324,6 @@ export default function SubscriptionConfirmationScreen() {
           `Your subscription has been successfully created for ${getTotalItemsCount()} items across ${selectedSchedule.length} days.`,
           [
             { 
-              text: 'View Subscription', 
-              onPress: () => {
-                clearSchedule();
-                // Navigate to subscription details or home
-                router.replace('/(customer)');
-              }
-            },
-            { 
               text: 'OK', 
               onPress: () => {
                 clearSchedule();
