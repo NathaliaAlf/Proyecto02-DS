@@ -20,6 +20,28 @@ import {
   View
 } from 'react-native';
 
+// Define the type for detailed plate customization
+interface DetailedPlateCustomization {
+  plateId: string;
+  plateName: string;
+  quantity: number;
+  customization: {
+    selectedOptions: Array<{
+      sectionId: string;
+      sectionName: string;
+      optionId: string;
+      optionName: string;
+      additionalCost: number;
+      ingredientDependent?: boolean;
+      optionIngredients?: any[];
+    }>;
+    removedIngredients: string[];
+    notes: string;
+    totalPrice: number;
+    plateDetails?: any;
+  };
+}
+
 // Helper function to format day and meal
 const formatDayAndMeal = (dayId?: string, mealTimeId?: string) => {
   const days: Record<string, string> = {
@@ -33,15 +55,15 @@ const formatDayAndMeal = (dayId?: string, mealTimeId?: string) => {
   };
   
   const meals: Record<string, string> = {
-    'breakfast': 'first',
-    'lunch': 'second',
-    'dinner': 'third'
+    'breakfast': 'Breakfast',
+    'lunch': 'Lunch',
+    'dinner': 'Dinner'
   };
   
   const dayName = dayId ? days[dayId] || 'Day' : 'Day';
   const mealName = mealTimeId ? meals[mealTimeId] || 'meal' : 'meal';
   
-  return `Create an order for ${dayName} ${mealName} meal`;
+  return `Create an order for ${dayName} ${mealName}`;
 };
 
 export default function RestaurantDetailScreen() {
@@ -62,7 +84,8 @@ export default function RestaurantDetailScreen() {
   const [plates, setPlates] = useState<Plate[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [selectedPlates, setSelectedPlates] = useState<Record<string, number>>({});
+  // Update to store detailed plates instead of simple Record
+  const [selectedPlates, setSelectedPlates] = useState<DetailedPlateCustomization[]>([]);
 
   const isSubscribed = false;
   const dayAndTimeText = formatDayAndMeal(dayId, mealTimeId);
@@ -135,9 +158,26 @@ export default function RestaurantDetailScreen() {
     const existingPlates = selectedSchedule[currentDayIndex].meals[currentMealIndex].selectedPlates;
     if (existingPlates) {
       console.log('Loading existing plates:', existingPlates);
-      setSelectedPlates(existingPlates);
+      // Handle both old (Record<string, number>) and new (DetailedPlateCustomization[]) formats
+      if (Array.isArray(existingPlates)) {
+        setSelectedPlates(existingPlates);
+      } else {
+        // Convert old format to new format
+        const convertedPlates: DetailedPlateCustomization[] = Object.entries(existingPlates as Record<string, number>).map(([plateId, quantity]) => ({
+          plateId,
+          plateName: '', // Will be filled when we have more info
+          quantity,
+          customization: {
+            selectedOptions: [],
+            removedIngredients: [],
+            notes: '',
+            totalPrice: 0,
+          }
+        }));
+        setSelectedPlates(convertedPlates);
+      }
     } else {
-      setSelectedPlates({});
+      setSelectedPlates([]);
     }
   };
 
@@ -153,86 +193,36 @@ export default function RestaurantDetailScreen() {
   };
 
   const handlePlatePress = (plate: Plate) => {
-    // Save current selections before navigating
-    if (isSubscriptionFlow && dayId && mealTimeId) {
-      const currentDayIndex = selectedSchedule.findIndex(day => day.day === dayId);
-      const currentMealIndex = selectedSchedule[currentDayIndex]?.meals.findIndex(
-        meal => meal.type === mealTimeId
-      );
-      if (currentDayIndex !== -1 && currentMealIndex !== -1) {
-        updateMealCompletion(currentDayIndex, currentMealIndex, false, selectedPlates);
-      }
+    if (isSubscriptionFlow) {
+      router.push({
+        pathname: "/(customer)/subscriptions/[restaurantId]/[dayId]/[mealTimeId]/[plateId]",
+        params: { 
+          restaurantId,
+          dayId: dayId || '',
+          mealTimeId: mealTimeId || '',
+          restaurantName: restaurant?.restaurantName || '',
+          plateId: plate.id,
+          plateName: plate.name,
+          subscriptionFlow: isSubscriptionFlow ? 'true' : undefined
+        }
+      });
+    } else {
+      // Regular flow - different navigation path
+      router.push({
+        pathname: "/(customer)/subscriptions/[restaurantId]/[dayId]/[mealTimeId]/[plateId]",
+        params: { 
+          restaurantId,
+          categoryId: categoryId || '',
+          restaurantName: restaurant?.restaurantName || '',
+          plateId: plate.id,
+          plateName: plate.name
+        }
+      });
     }
-
-    // Navigate to plate detail screen
-    router.push({
-      pathname: "/(customer)/subscriptions/[restaurantId]/[dayId]/[mealTimeId]/[plateId]",
-      params: { 
-        restaurantId,
-        dayId: dayId || '',
-        mealTimeId: mealTimeId || '',
-        restaurantName: restaurant?.restaurantName || '',
-        plateId: plate.id,
-        plateName: plate.name,
-        subscriptionFlow: isSubscriptionFlow ? 'true' : undefined
-      }
-    });
-  };
-
-  const handleAddToOrder = (plateId: string) => {
-    setSelectedPlates(prev => {
-      const newPlates = {
-        ...prev,
-        [plateId]: (prev[plateId] || 0) + 1
-      };
-      
-      // Also update context immediately
-      if (isSubscriptionFlow && dayId && mealTimeId) {
-        const currentDayIndex = selectedSchedule.findIndex(day => day.day === dayId);
-        const currentMealIndex = selectedSchedule[currentDayIndex]?.meals.findIndex(
-          meal => meal.type === mealTimeId
-        );
-        if (currentDayIndex !== -1 && currentMealIndex !== -1) {
-          updateMealCompletion(currentDayIndex, currentMealIndex, false, newPlates);
-        }
-      }
-      
-      return newPlates;
-    });
-  };
-
-  const handleRemoveFromOrder = (plateId: string) => {
-    setSelectedPlates(prev => {
-      const currentQuantity = prev[plateId] || 0;
-      let newPlates;
-      
-      if (currentQuantity <= 1) {
-        newPlates = { ...prev };
-        delete newPlates[plateId];
-      } else {
-        newPlates = {
-          ...prev,
-          [plateId]: currentQuantity - 1
-        };
-      }
-      
-      // Also update context immediately
-      if (isSubscriptionFlow && dayId && mealTimeId) {
-        const currentDayIndex = selectedSchedule.findIndex(day => day.day === dayId);
-        const currentMealIndex = selectedSchedule[currentDayIndex]?.meals.findIndex(
-          meal => meal.type === mealTimeId
-        );
-        if (currentDayIndex !== -1 && currentMealIndex !== -1) {
-          updateMealCompletion(currentDayIndex, currentMealIndex, false, newPlates);
-        }
-      }
-      
-      return newPlates;
-    });
   };
 
   const getSelectedCount = () => {
-    return Object.values(selectedPlates).reduce((sum, quantity) => sum + quantity, 0);
+    return selectedPlates.reduce((sum, plate) => sum + plate.quantity, 0);
   };
 
   const getPreviousMeal = () => {
@@ -278,17 +268,20 @@ export default function RestaurantDetailScreen() {
     const prevMealItem = prevDay.meals[prevMeal.mealIndex];
     
     // Navigate to previous meal
-    router.replace({
-      pathname: '/subscriptions/[restaurantId]/menu',
-      params: { 
-        restaurantId,
-        categoryId: categoryId || '',
-        dayId: prevDay.day,
-        mealTimeId: prevMealItem.type,
-        restaurantName: restaurant?.restaurantName || '',
-        subscriptionFlow: 'true'
-      }
-    });
+    // Use the correct route structure
+    if (isSubscriptionFlow) {
+      router.replace({
+        pathname: '/subscriptions/[restaurantId]/menu',
+        params: { 
+          restaurantId,
+          categoryId: categoryId || '',
+          dayId: prevDay.day,
+          mealTimeId: prevMealItem.type,
+          restaurantName: restaurant?.restaurantName || '',
+          subscriptionFlow: 'true'
+        }
+      });
+    }
   };
 
   const handleNext = () => {
@@ -351,7 +344,7 @@ export default function RestaurantDetailScreen() {
       });
       
       // Clear selected plates for the new meal
-      setSelectedPlates({});
+      setSelectedPlates([]);
     } else {
       // All meals completed - navigate to subscription confirmation
       router.push({
@@ -365,21 +358,33 @@ export default function RestaurantDetailScreen() {
   };
 
   const handleViewOrder = () => {
-    router.push({
-      pathname: '/(customer)/subscriptions/order',
-      params: {
-        restaurantId,
-        restaurantName: restaurant?.restaurantName || '',
-        categoryId: categoryId || '',
-        dayId: dayId || '',
-        mealTimeId: mealTimeId || '',
-        subscriptionFlow: isSubscriptionFlow ? 'true' : undefined
-      }
-    });
+    if (isSubscriptionFlow) {
+      router.push({
+        pathname: '/(customer)/subscriptions/order',
+        params: {
+          restaurantId,
+          restaurantName: restaurant?.restaurantName || '',
+          categoryId: categoryId || '',
+          dayId: dayId || '',
+          mealTimeId: mealTimeId || '',
+          subscriptionFlow: 'true'
+        }
+      });
+    } else {
+      // Regular flow - navigate to cart
+      router.push({
+        pathname: '/(customer)/subscriptions/order',
+        params: {
+          restaurantId,
+          restaurantName: restaurant?.restaurantName || ''
+        }
+      });
+    }
   };
 
   const renderPlateItem = ({ item }: { item: Plate }) => {
-    const quantity = selectedPlates[item.id] || 0;
+    const selectedPlate = selectedPlates.find(p => p.plateId === item.id);
+    const quantity = selectedPlate?.quantity || 0;
     
     return (
       <View style={styles.plateCardContainer}>
@@ -408,6 +413,12 @@ export default function RestaurantDetailScreen() {
               {item.description}
             </Text>
             <Text style={styles.platePrice}>${item.basePrice.toFixed(2)}</Text>
+            
+            {quantity > 0 && (
+              <View style={styles.quantityBadge}>
+                <Text style={styles.quantityBadgeText}>{quantity}</Text>
+              </View>
+            )}
           </View>
         </TouchableOpacity>
       </View>
@@ -561,7 +572,7 @@ export default function RestaurantDetailScreen() {
         <Text style={[styles.dayAndTimeText, { color: colors.defaultColor }]}>
           {dayAndTimeText}
         </Text>
-        {isSubscriptionFlow && selectedPlates && Object.keys(selectedPlates).length > 0 && (
+        {isSubscriptionFlow && selectedPlates.length > 0 && (
           <Text style={[styles.selectedCountText, { color: colors.second }]}>
             {getSelectedCount()} item{getSelectedCount() !== 1 ? 's' : ''} selected
           </Text>
@@ -763,7 +774,6 @@ const createStyles = (colors: any) => StyleSheet.create({
     fontWeight: '600',
     textAlign: 'center',
     marginBottom: 4,
-    shadowColor: colors.defaultColor,
   },
   selectedCountText: {
     fontSize: 14,
@@ -782,6 +792,7 @@ const createStyles = (colors: any) => StyleSheet.create({
   plateCardContainer: {
     width: '48%',
     marginBottom: 8,
+    position: 'relative',
   },
   plateCard: {
     backgroundColor: colors.third,
@@ -829,45 +840,25 @@ const createStyles = (colors: any) => StyleSheet.create({
     fontWeight: 'bold',
     color: colors.primary,
   },
-  // Quantity Controls
-  quantityControls: {
-    flexDirection: 'row',
+  // Quantity Badge
+  quantityBadge: {
+    position: 'absolute',
+    top: 8,
+    right: 8,
+    backgroundColor: colors.defaultColor,
+    borderRadius: 12,
+    minWidth: 24,
+    height: 24,
     alignItems: 'center',
     justifyContent: 'center',
-    marginTop: 8,
+    paddingHorizontal: 6,
   },
-  quantityButton: {
-    width: 28,
-    height: 28,
-    borderRadius: 14,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  quantityButtonText: {
-    color: colors.second,
-    fontSize: 16,
-    fontWeight: 'bold',
-  },
-  quantityText: {
-    fontSize: 16,
-    fontWeight: '600',
-    marginHorizontal: 12,
-    minWidth: 20,
-    textAlign: 'center',
-  },
-  addButton: {
-    paddingVertical: 8,
-    paddingHorizontal: 12,
-    borderRadius: 8,
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginTop: 8,
-  },
-  addButtonText: {
+  quantityBadgeText: {
     color: colors.second,
     fontSize: 12,
-    fontWeight: '600',
+    fontWeight: 'bold',
   },
+  // Quantity Controls (removed from here - handled in plate detail screen)
   emptyContainer: {
     flex: 1,
     justifyContent: 'center',

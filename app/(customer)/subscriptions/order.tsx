@@ -18,6 +18,28 @@ import {
   View
 } from 'react-native';
 
+// Define the type for detailed plate customization (should match other files)
+interface DetailedPlateCustomization {
+  plateId: string;
+  plateName: string;
+  quantity: number;
+  customization: {
+    selectedOptions: Array<{
+      sectionId: string;
+      sectionName: string;
+      optionId: string;
+      optionName: string;
+      additionalCost: number;
+      ingredientDependent?: boolean;
+      optionIngredients?: any[];
+    }>;
+    removedIngredients: string[];
+    notes: string;
+    totalPrice: number;
+    plateDetails?: any;
+  };
+}
+
 export default function OrderScreen() {
   const { colors } = useTheme();
   const { selectedSchedule, updateMealCompletion, getNextUncompletedMeal } = useSubscription();
@@ -35,7 +57,8 @@ export default function OrderScreen() {
   const [plates, setPlates] = useState<Plate[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [selectedPlates, setSelectedPlates] = useState<Record<string, number>>({});
+  // Updated to use DetailedPlateCustomization[] instead of Record<string, number>
+  const [selectedPlates, setSelectedPlates] = useState<DetailedPlateCustomization[]>([]);
   const [restaurantData, setRestaurantData] = useState<{ id: string; name: string } | null>(null);
 
   const isSubscriptionFlow = subscriptionFlow === 'true';
@@ -81,8 +104,34 @@ export default function OrderScreen() {
           );
           if (currentMealIndex !== -1) {
             const existingPlates = selectedSchedule[currentDayIndex].meals[currentMealIndex].selectedPlates;
+            console.log('Loading existing plates in order screen:', existingPlates);
+            
             if (existingPlates) {
-              setSelectedPlates(existingPlates);
+              if (Array.isArray(existingPlates)) {
+                // New format: DetailedPlateCustomization[]
+                setSelectedPlates(existingPlates);
+              } else {
+                // Old format: Record<string, number> - convert to new format
+                const convertedPlates: DetailedPlateCustomization[] = Object.entries(existingPlates as Record<string, number>).map(([plateId, quantity]) => ({
+                  plateId,
+                  plateName: plates.find(p => p.id === plateId)?.name || '',
+                  quantity,
+                  customization: {
+                    selectedOptions: [],
+                    removedIngredients: [],
+                    notes: '',
+                    totalPrice: plates.find(p => p.id === plateId)?.basePrice || 0,
+                    plateDetails: {
+                      basePrice: plates.find(p => p.id === plateId)?.basePrice || 0,
+                      description: plates.find(p => p.id === plateId)?.description || '',
+                      imageUrl: plates.find(p => p.id === plateId)?.imageUrl || ''
+                    }
+                  }
+                }));
+                setSelectedPlates(convertedPlates);
+              }
+            } else {
+              setSelectedPlates([]);
             }
           }
         }
@@ -96,12 +145,41 @@ export default function OrderScreen() {
   };
 
   const handleQuantityChange = (plateId: string, newQuantity: number) => {
-    const updatedPlates = { ...selectedPlates };
+    const existingPlate = selectedPlates.find(p => p.plateId === plateId);
+    
+    let updatedPlates: DetailedPlateCustomization[];
     
     if (newQuantity <= 0) {
-      delete updatedPlates[plateId];
+      // Remove the plate
+      updatedPlates = selectedPlates.filter(p => p.plateId !== plateId);
+    } else if (existingPlate) {
+      // Update quantity of existing plate
+      updatedPlates = selectedPlates.map(p => 
+        p.plateId === plateId 
+          ? { ...p, quantity: newQuantity }
+          : p
+      );
     } else {
-      updatedPlates[plateId] = newQuantity;
+      // Add new plate (shouldn't happen here, but just in case)
+      const plateToAdd = plates.find(p => p.id === plateId);
+      if (!plateToAdd) return;
+      
+      updatedPlates = [...selectedPlates, {
+        plateId,
+        plateName: plateToAdd.name,
+        quantity: newQuantity,
+        customization: {
+          selectedOptions: [],
+          removedIngredients: [],
+          notes: '',
+          totalPrice: plateToAdd.basePrice,
+          plateDetails: {
+            basePrice: plateToAdd.basePrice,
+            description: plateToAdd.description,
+            imageUrl: plateToAdd.imageUrl
+          }
+        }
+      }];
     }
     
     setSelectedPlates(updatedPlates);
@@ -144,7 +222,7 @@ export default function OrderScreen() {
       return;
     }
 
-    // Subscription flow logic - same as menu screen
+    // Subscription flow logic
     if (!dayId || !mealTimeId || !selectedSchedule.length) {
       Alert.alert('Error', 'Missing required information.');
       return;
@@ -181,7 +259,7 @@ export default function OrderScreen() {
       
       // Navigate to next meal menu
       router.replace({
-        pathname: '/subscriptions/[restaurantId]/menu',
+        pathname: '/(customer)/restaurants/[categoryId]/[restaurantId]',
         params: { 
           restaurantId,
           categoryId: categoryId || '',
@@ -207,34 +285,58 @@ export default function OrderScreen() {
     router.back();
   };
 
+  const handleClearAll = () => {
+    Alert.alert(
+      'Clear All Items',
+      'Are you sure you want to remove all items from your order?',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        { 
+          text: 'Clear All', 
+          style: 'destructive', 
+          onPress: () => {
+            setSelectedPlates([]);
+            if (isSubscriptionFlow && dayId && mealTimeId) {
+              const currentDayIndex = selectedSchedule.findIndex(day => day.day === dayId);
+              const currentMealIndex = selectedSchedule[currentDayIndex]?.meals.findIndex(
+                meal => meal.type === mealTimeId
+              );
+              if (currentDayIndex !== -1 && currentMealIndex !== -1) {
+                updateMealCompletion(currentDayIndex, currentMealIndex, false, []);
+              }
+            }
+          }
+        }
+      ]
+    );
+  };
+
   const getSelectedCount = () => {
-    return Object.values(selectedPlates).reduce((sum, quantity) => sum + quantity, 0);
+    return selectedPlates.reduce((sum, plate) => sum + plate.quantity, 0);
   };
 
   const calculateSubtotal = () => {
-    let subtotal = 0;
-    
-    Object.entries(selectedPlates).forEach(([plateId, quantity]) => {
-      const plate = plates.find(p => p.id === plateId);
-      if (plate) {
-        subtotal += plate.basePrice * quantity;
-      }
-    });
-    
-    return subtotal;
+    return selectedPlates.reduce((sum, plate) => {
+      // Use the totalPrice from customization or fallback to basePrice
+      const pricePerPlate = plate.customization.totalPrice || 0;
+      return sum + (pricePerPlate * plate.quantity);
+    }, 0);
   };
 
-  const renderOrderItem = ({ item }: { item: Plate }) => {
-    const quantity = selectedPlates[item.id] || 0;
+  const getPlateDetails = (plateId: string): Plate | undefined => {
+    return plates.find(p => p.id === plateId);
+  };
+
+  const renderOrderItem = ({ item }: { item: DetailedPlateCustomization }) => {
+    const plateDetails = getPlateDetails(item.plateId);
+    if (!plateDetails) return null;
     
-    if (quantity === 0) return null;
-    
-    const itemTotal = item.basePrice * quantity;
+    const itemTotal = (item.customization.totalPrice || plateDetails.basePrice) * item.quantity;
     
     return (
       <View style={styles.cartItem}>
-        {item.imageUrl ? (
-          <Image source={{ uri: item.imageUrl }} style={styles.itemImage} />
+        {plateDetails.imageUrl ? (
+          <Image source={{ uri: plateDetails.imageUrl }} style={styles.itemImage} />
         ) : (
           <View style={[styles.itemImage, styles.defaultImage]}>
             <Ionicons name="fast-food-outline" size={40} color={colors.second} />
@@ -242,26 +344,49 @@ export default function OrderScreen() {
         )}
         
         <View style={styles.itemDetails}>
-          <Text style={styles.itemName}>{item.name}</Text>
+          <Text style={styles.itemName}>{item.plateName || plateDetails.name}</Text>
           <Text style={styles.itemDescription} numberOfLines={2}>
-            {item.description}
+            {plateDetails.description}
           </Text>
+          
+          {/* Show customization details if available */}
+          {(item.customization.selectedOptions.length > 0 || 
+            item.customization.removedIngredients.length > 0 ||
+            item.customization.notes) && (
+            <View style={styles.customizationDetails}>
+              {item.customization.selectedOptions.length > 0 && (
+                <Text style={styles.customizationText} numberOfLines={1}>
+                  Options: {item.customization.selectedOptions.map(opt => opt.optionName).join(', ')}
+                </Text>
+              )}
+              {item.customization.removedIngredients.length > 0 && (
+                <Text style={styles.customizationText} numberOfLines={1}>
+                  Removed: {item.customization.removedIngredients.join(', ')}
+                </Text>
+              )}
+              {item.customization.notes && (
+                <Text style={styles.customizationText} numberOfLines={1} ellipsizeMode="tail">
+                  Notes: {item.customization.notes}
+                </Text>
+              )}
+            </View>
+          )}
           
           <View style={styles.itemFooter}>
             <View style={styles.quantityContainer}>
               <TouchableOpacity 
                 style={styles.quantityButton}
-                onPress={() => handleQuantityChange(item.id, quantity - 1)}
-                disabled={quantity <= 1}
+                onPress={() => handleQuantityChange(item.plateId, item.quantity - 1)}
+                disabled={item.quantity <= 1}
               >
                 <Ionicons name="remove" size={20} color={colors.defaultColor} />
               </TouchableOpacity>
               
-              <Text style={styles.quantityText}>{quantity}</Text>
+              <Text style={styles.quantityText}>{item.quantity}</Text>
               
               <TouchableOpacity 
                 style={styles.quantityButton}
-                onPress={() => handleQuantityChange(item.id, quantity + 1)}
+                onPress={() => handleQuantityChange(item.plateId, item.quantity + 1)}
               >
                 <Ionicons name="add" size={20} color={colors.defaultColor} />
               </TouchableOpacity>
@@ -273,7 +398,7 @@ export default function OrderScreen() {
             
             <TouchableOpacity 
               style={styles.removeButton}
-              onPress={() => handleRemoveItem(item.id, item.name)}
+              onPress={() => handleRemoveItem(item.plateId, item.plateName || plateDetails.name)}
             >
               <Ionicons name="trash-outline" size={20} color="#ff4444" />
             </TouchableOpacity>
@@ -304,8 +429,7 @@ export default function OrderScreen() {
     );
   }
 
-  const selectedItems = plates.filter(plate => selectedPlates[plate.id] > 0);
-  const hasItems = selectedItems.length > 0;
+  const hasItems = selectedPlates.length > 0;
 
   return (
     <View style={styles.container}>
@@ -327,7 +451,7 @@ export default function OrderScreen() {
         </View>
         
         {hasItems && (
-          <TouchableOpacity onPress={() => setSelectedPlates({})}>
+          <TouchableOpacity onPress={handleClearAll}>
             <Text style={styles.clearText}>Clear All</Text>
           </TouchableOpacity>
         )}
@@ -347,9 +471,9 @@ export default function OrderScreen() {
       ) : (
         <>
           <FlatList
-            data={plates}
+            data={selectedPlates}
             renderItem={renderOrderItem}
-            keyExtractor={item => item.id}
+            keyExtractor={item => `${item.plateId}-${item.customization.notes || 'default'}`}
             contentContainerStyle={styles.listContainer}
             showsVerticalScrollIndicator={false}
             ListFooterComponent={<View style={styles.listFooter} />}
@@ -380,7 +504,7 @@ export default function OrderScreen() {
         disabled={isSubscriptionFlow && getSelectedCount() === 0}
       >
         <Text style={styles.nextButtonText}>
-          {isSubscriptionFlow ? 'Next Order' : 'Complete Order'}
+          {isSubscriptionFlow ? 'Next Meal' : 'Complete Order'}
         </Text>
         <Ionicons 
           name="arrow-forward" 
@@ -470,7 +594,17 @@ const createStyles = (colors: any) => StyleSheet.create({
   itemDescription: {
     fontSize: 12,
     color: '#777',
+    marginBottom: 4,
+  },
+  customizationDetails: {
     marginBottom: 8,
+    padding: 6,
+  },
+  customizationText: {
+    fontSize: 11,
+    color: '#777',
+    fontStyle: 'italic',
+    marginBottom: 2,
   },
   itemFooter: {
     flexDirection: 'row',
@@ -536,9 +670,9 @@ const createStyles = (colors: any) => StyleSheet.create({
   nextButton: {
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'flex-end',
-    paddingHorizontal: 16,
-    paddingVertical: 10,
+    justifyContent: 'center',
+    paddingHorizontal: 24,
+    paddingVertical: 12,
     marginBottom: 50,
     marginHorizontal: 15,
     borderRadius: 20,
@@ -553,7 +687,7 @@ const createStyles = (colors: any) => StyleSheet.create({
     color: colors.second,
     fontSize: 16,
     fontWeight: '600',
-    margin: 'auto',
+    marginRight: 8,
   },
   nextButtonIcon: {
     marginLeft: 2,

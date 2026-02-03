@@ -24,6 +24,53 @@ import {
 } from 'react-native';
 import { Checkbox } from 'react-native-paper';
 
+// Define the type for detailed plate customization
+interface DetailedPlateCustomization {
+  plateId: string;
+  plateName: string;
+  quantity: number;
+  customization: {
+    selectedOptions: Array<{
+      sectionId: string;
+      sectionName: string;
+      optionId: string;
+      optionName: string;
+      additionalCost: number;
+      ingredientDependent?: boolean;
+      optionIngredients?: Ingredient[];
+    }>;
+    removedIngredients: string[];
+    notes: string;
+    totalPrice: number;
+    plateDetails?: {
+      basePrice: number;
+      description: string;
+      baseIngredients: Ingredient[];
+      sections: Array<{
+        id: string;
+        name: string;
+        required: boolean;
+        multiple: boolean;
+        ingredientDependent: boolean;
+        options: Array<{
+          id: string;
+          name: string;
+          additionalCost: number;
+          ingredients?: Ingredient[];
+        }>;
+      }>;
+      customizationState: {
+        removedIngredients: string[];
+        selectedOptions: Record<string, string[]>;
+        quantity: number;
+        notes: string;
+      };
+      currentIngredients: Ingredient[];
+      imageUrl?: string;
+    };
+  };
+}
+
 export default function PlateDetailScreen() {
   const { colors } = useTheme();
   const { user } = useAuth();
@@ -161,78 +208,68 @@ export default function PlateDetailScreen() {
     setShowNotesModal(false);
   };
 
-  const handleAddToOrder = () => {
-    if (!plate) return;
-
-    // Create selected plates object for this plate
-    const selectedPlates = {
-      [plate.id]: quantity
-    };
-
-    if (isSubscriptionFlow) {
-      handleSubscriptionFlow(selectedPlates);
-    } else {
-      // Regular flow - show confirmation
-      Alert.alert(
-        'Added to Order',
-        `Added ${quantity}x ${plate.name} to your order.`,
-        [{ text: 'OK' }]
-      );
-      
-      // Navigate back to restaurant menu
-      router.back();
-    }
-  };
-
-  const handleSubscriptionFlow = (selectedPlates: Record<string, number>) => {
-    if (!dayId || !mealTimeId || !selectedSchedule.length) {
-      Alert.alert('Error', 'Missing required information for subscription flow.');
-      return;
-    }
-
-    // Find current day/meal indices
-    const currentDayIndex = selectedSchedule.findIndex(day => day.day === dayId);
-    if (currentDayIndex === -1) {
-      Alert.alert('Error', 'Could not find current day in schedule.');
-      return;
-    }
+  // Helper function to get selected option details
+  const getSelectedOptionDetails = () => {
+    if (!plate) return [];
     
-    const currentMealIndex = selectedSchedule[currentDayIndex].meals.findIndex(meal => meal.type === mealTimeId);
-    if (currentMealIndex === -1) {
-      Alert.alert('Error', 'Could not find current meal in schedule.');
-      return;
-    }
-
-    // UPDATE: Only update the selected plates, DON'T mark as completed
-    // The meal should only be marked complete when "Next Meal" is pressed on the menu screen
-    updateMealCompletion(currentDayIndex, currentMealIndex, false, selectedPlates);
-
-    // Navigate back to the menu (not to next meal)
-    router.back();
+    const selectedOptionDetails: Array<{
+      sectionId: string;
+      sectionName: string;
+      optionId: string;
+      optionName: string;
+      additionalCost: number;
+    }> = [];
+    
+    Object.entries(selectedOptions).forEach(([sectionId, optionIds]) => {
+      const section = plate.sections.find(s => s.id === sectionId);
+      if (section) {
+        optionIds.forEach(optionId => {
+          const option = section.options.find(o => o.id === optionId);
+          if (option) {
+            selectedOptionDetails.push({
+              sectionId,
+              sectionName: section.name,
+              optionId,
+              optionName: option.name,
+              additionalCost: option.additionalCost || 0
+            });
+          }
+        });
+      }
+    });
+    
+    return selectedOptionDetails;
   };
 
-  if (loading) {
-    return (
-      <View style={styles.loadingContainer}>
-        <ActivityIndicator size="large" color={colors.tint} />
-        <Text style={styles.loadingText}>Loading plate details...</Text>
-      </View>
+  // Helper function to get filtered ingredients for cart
+  const getFilteredIngredientsForCart = (): Ingredient[] => {
+    if (!plate) return [];
+    
+    let allIngredients = [...plate.baseIngredients];
+    
+    Object.entries(selectedOptions).forEach(([sectionId, optionIds]) => {
+      const section = plate.sections.find(s => s.id === sectionId);
+      if (section?.ingredientDependent) {
+        optionIds.forEach(optionId => {
+          const option = section.options.find(o => o.id === optionId);
+          if (option?.ingredients) {
+            allIngredients = [...allIngredients, ...option.ingredients];
+          }
+        });
+      }
+    });
+    
+    const uniqueIngredients = allIngredients.reduce((acc, ing) => {
+      if (!acc.some(i => i.name === ing.name)) {
+        acc.push(ing);
+      }
+      return acc;
+    }, [] as Ingredient[]);
+    
+    return uniqueIngredients.filter(ing => 
+      ing.obligatory || !removedIngredients.has(ing.name)
     );
-  }
-
-  if (!plate) {
-    return (
-      <View style={styles.loadingContainer}>
-        <Text style={styles.errorText}>Plate not found</Text>
-        <TouchableOpacity 
-          style={styles.retryButton}
-          onPress={() => router.back()}
-        >
-          <Text style={styles.retryButtonText}>Go Back</Text>
-        </TouchableOpacity>
-      </View>
-    );
-  }
+  };
 
   // Helper function to get current ingredients
   const getCurrentIngredients = () => {
@@ -261,6 +298,164 @@ export default function PlateDetailScreen() {
     
     return uniqueIngredients;
   };
+
+  const handleAddToOrder = () => {
+    if (!plate) return;
+
+    // Calculate price per plate
+    const pricePerPlate = calculateTotalPrice() / quantity;
+    
+    // Get selected option details
+    const selectedOptionDetails = getSelectedOptionDetails();
+    
+    // Get filtered ingredients (with removed ingredients filtered out)
+    const filteredIngredients = getFilteredIngredientsForCart();
+
+    // Create complete plate customization object
+    const plateCustomization: DetailedPlateCustomization = {
+      plateId: plate.id,
+      plateName: plate.name,
+      quantity,
+      customization: {
+        selectedOptions: selectedOptionDetails.map(option => ({
+          ...option,
+          ingredientDependent: plate.sections.find(s => s.id === option.sectionId)?.ingredientDependent || false,
+          optionIngredients: plate.sections
+            .find(s => s.id === option.sectionId)
+            ?.options.find(o => o.id === option.optionId)
+            ?.ingredients || []
+        })),
+        removedIngredients: Array.from(removedIngredients),
+        notes: notes.trim(),
+        totalPrice: pricePerPlate,
+        plateDetails: {
+          basePrice: plate.basePrice,
+          description: plate.description,
+          baseIngredients: plate.baseIngredients,
+          sections: plate.sections.map(section => ({
+            id: section.id,
+            name: section.name,
+            required: section.required,
+            multiple: section.multiple,
+            ingredientDependent: section.ingredientDependent,
+            options: section.options.map(option => ({
+              id: option.id,
+              name: option.name,
+              additionalCost: option.additionalCost || 0,
+              ingredients: option.ingredients || []
+            }))
+          })),
+          customizationState: {
+            removedIngredients: Array.from(removedIngredients),
+            selectedOptions: { ...selectedOptions },
+            quantity,
+            notes: notes.trim()
+          },
+          currentIngredients: filteredIngredients,
+          imageUrl: plate.imageUrl
+        }
+      }
+    };
+
+    if (isSubscriptionFlow) {
+      handleSubscriptionFlow(plateCustomization); // Pass single plate, not array
+    } else {
+      // Regular flow
+      Alert.alert(
+        'Added to Order',
+        `Added ${quantity}x ${plate.name} to your order.`,
+        [{ text: 'OK' }]
+      );
+      
+      router.back();
+    }
+  };
+
+  const handleSubscriptionFlow = (newPlateData: DetailedPlateCustomization) => {
+    if (!dayId || !mealTimeId || !selectedSchedule.length) {
+      Alert.alert('Error', 'Missing required information for subscription flow.');
+      console.error('Missing params:', { dayId, mealTimeId, selectedScheduleLength: selectedSchedule.length });
+      return;
+    }
+
+    // Find current day/meal indices
+    const currentDayIndex = selectedSchedule.findIndex(day => day.day === dayId);
+    console.log('Searching for dayId:', dayId, 'in schedule:', selectedSchedule.map(d => ({ day: d.day, dayLabel: d.dayLabel })));
+    console.log('Found day index:', currentDayIndex);
+    
+    if (currentDayIndex === -1) {
+      Alert.alert('Error', 'Could not find current day in schedule.');
+      return;
+    }
+    
+    const currentMealIndex = selectedSchedule[currentDayIndex].meals.findIndex(meal => meal.type === mealTimeId);
+    console.log('Searching for mealTimeId:', mealTimeId, 'in day meals:', selectedSchedule[currentDayIndex].meals.map(m => ({ type: m.type, typeLabel: m.typeLabel })));
+    console.log('Found meal index:', currentMealIndex);
+    
+    if (currentMealIndex === -1) {
+      Alert.alert('Error', 'Could not find current meal in schedule.');
+      return;
+    }
+
+    // Get existing plates for this meal
+    const existingPlates = selectedSchedule[currentDayIndex].meals[currentMealIndex].selectedPlates || [];
+    console.log('Existing plates before update:', existingPlates);
+
+    // Check if this plate already exists
+    const existingPlateIndex = Array.isArray(existingPlates) 
+      ? existingPlates.findIndex((p: any) => p.plateId === newPlateData.plateId)
+      : -1;
+
+    let updatedPlates: DetailedPlateCustomization[];
+    
+    if (existingPlateIndex >= 0) {
+      // Update existing plate (replace with new customization)
+      updatedPlates = [...existingPlates];
+      updatedPlates[existingPlateIndex] = newPlateData;
+      console.log('Updated existing plate at index:', existingPlateIndex);
+    } else {
+      // Add new plate to the array
+      updatedPlates = [...existingPlates, newPlateData];
+      console.log('Added new plate to array');
+    }
+
+    console.log('Updated plates array:', updatedPlates);
+    console.log('Calling updateMealCompletion with:', {
+      dayIndex: currentDayIndex,
+      mealIndex: currentMealIndex,
+      platesCount: updatedPlates.length
+    });
+
+    // Call updateMealCompletion with the updated plates array
+    updateMealCompletion(currentDayIndex, currentMealIndex, false, updatedPlates);
+
+    // Navigate back to the menu
+    console.log('Navigating back to menu...');
+    router.back();
+  };
+
+  if (loading) {
+    return (
+      <View style={styles.loadingContainer}>
+        <ActivityIndicator size="large" color={colors.tint} />
+        <Text style={styles.loadingText}>Loading plate details...</Text>
+      </View>
+    );
+  }
+
+  if (!plate) {
+    return (
+      <View style={styles.loadingContainer}>
+        <Text style={styles.errorText}>Plate not found</Text>
+        <TouchableOpacity 
+          style={styles.retryButton}
+          onPress={() => router.back()}
+        >
+          <Text style={styles.retryButtonText}>Go Back</Text>
+        </TouchableOpacity>
+      </View>
+    );
+  }
 
   const currentIngredients = getCurrentIngredients();
   
@@ -357,7 +552,7 @@ export default function PlateDetailScreen() {
               Tap to remove ingredients. <Text style={styles.mandatoryNote}>Red items cannot be removed.</Text>
             </Text>
             <View style={styles.ingredientsContainer}>
-              {getCurrentIngredients().map((ingredient, index) => {
+              {currentIngredients.map((ingredient, index) => {
                 const isRemoved = removedIngredients.has(ingredient.name);
                 const isMandatory = ingredient.obligatory;
                 

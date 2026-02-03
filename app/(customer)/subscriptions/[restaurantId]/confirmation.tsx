@@ -4,9 +4,18 @@ import { DaySchedule, SelectedMeal, useSubscription } from '@/context/Subscripti
 import { useTheme } from '@/context/ThemeContext';
 import { menuApi } from '@/services/api/menuApi';
 import { restaurantApi } from '@/services/api/restaurantApi';
-import { subscriptionApi } from '@/services/api/subscriptionApi'; // Import the subscription API
+import { subscriptionApi } from '@/services/api/subscriptionApi';
 import { Plate } from '@/types/menu';
-import { CreateSubscriptionDayDTO, CreateSubscriptionDTO, CreateSubscriptionMealDTO, DayOfWeek, SubscriptionDeliveryAddress, SubscriptionPlateItem } from '@/types/subscription';
+import {
+  CreateSubscriptionDayDTO,
+  CreateSubscriptionDTO,
+  CreateSubscriptionMealDTO,
+  DayOfWeek,
+  IngredientModification,
+  SubscriptionDeliveryAddress,
+  SubscriptionPlateItem,
+  SubscriptionSelectedOption
+} from '@/types/subscription';
 import { Ionicons } from '@expo/vector-icons';
 import { router, useLocalSearchParams } from 'expo-router';
 import { useEffect, useState } from 'react';
@@ -20,6 +29,36 @@ import {
   TouchableOpacity,
   View
 } from 'react-native';
+
+// Define the type for detailed plate customization (should match other files)
+interface DetailedPlateCustomization {
+  plateId: string;
+  plateName: string;
+  quantity: number;
+  customization: {
+    selectedOptions: Array<{
+      sectionId: string;
+      sectionName: string;
+      optionId: string;
+      optionName: string;
+      additionalCost: number;
+      ingredientDependent?: boolean;
+      optionIngredients?: any[];
+    }>;
+    removedIngredients: string[];
+    notes: string;
+    totalPrice: number;
+    plateDetails?: {
+      basePrice: number;
+      description: string;
+      baseIngredients: any[];
+      sections: any[];
+      customizationState: any;
+      currentIngredients: any[];
+      imageUrl?: string;
+    };
+  };
+}
 
 // Helper function to format day name
 const formatDayName = (dayId: string) => {
@@ -52,20 +91,41 @@ const convertToApiSchedule = (selectedSchedule: DaySchedule[], plates: Plate[]):
   return selectedSchedule
     .filter(day => 
       day.meals.some((meal: SelectedMeal) => 
-        meal.selectedPlates && Object.keys(meal.selectedPlates).length > 0
+        meal.selectedPlates && meal.selectedPlates.length > 0
       )
     )
     .map(day => {
       // Filter and map meals
       const meals: CreateSubscriptionMealDTO[] = day.meals
-        .filter(meal => meal.selectedPlates && Object.keys(meal.selectedPlates).length > 0)
+        .filter(meal => meal.selectedPlates && meal.selectedPlates.length > 0)
         .map(meal => {
-          // Create items array
+          // Create items array from detailed plates
           const items: Omit<SubscriptionPlateItem, 'id' | 'addedAt' | 'totalPrice'>[] = [];
           
-          Object.entries(meal.selectedPlates || {}).forEach(([plateId, quantity]) => {
-            const plate = plates.find(p => p.id === plateId);
+          (meal.selectedPlates as DetailedPlateCustomization[]).forEach((detailedPlate: DetailedPlateCustomization) => {
+            const plate = plates.find(p => p.id === detailedPlate.plateId);
             if (plate) {
+              // Convert selected options to SubscriptionSelectedOption format
+              const selectedOptions: SubscriptionSelectedOption[] = detailedPlate.customization.selectedOptions.map(option => ({
+                sectionId: option.sectionId,
+                sectionName: option.sectionName,
+                optionId: option.optionId,
+                optionName: option.optionName,
+                additionalCost: option.additionalCost
+              }));
+
+              // Convert removed ingredients to IngredientModification format
+              const ingredientModifications: IngredientModification[] = detailedPlate.customization.removedIngredients.map(ingredientName => ({
+                ingredientId: '', // We need to map ingredient name to ID
+                ingredientName: ingredientName,
+                action: 'remove',
+                priceDifference: 0
+              }));
+
+              // Calculate costs
+              const optionsCost = selectedOptions.reduce((sum, option) => sum + option.additionalCost, 0);
+              const ingredientsCost = ingredientModifications.reduce((sum, mod) => sum + (mod.priceDifference || 0), 0);
+              
               items.push({
                 plateId: plate.id,
                 plateName: plate.name,
@@ -75,13 +135,13 @@ const convertToApiSchedule = (selectedSchedule: DaySchedule[], plates: Plate[]):
                 variantName: null,
                 basePrice: plate.basePrice,
                 variantPrice: 0,
-                selectedOptions: [],
-                ingredientModifications: [],
+                selectedOptions: selectedOptions,
+                ingredientModifications: ingredientModifications,
                 customIngredients: null,
-                optionsCost: 0,
-                ingredientsCost: 0,
-                quantity: quantity,
-                notes: ''
+                optionsCost: optionsCost,
+                ingredientsCost: ingredientsCost,
+                quantity: detailedPlate.quantity,
+                notes: detailedPlate.customization.notes
               });
             }
           });
@@ -170,22 +230,17 @@ export default function SubscriptionConfirmationScreen() {
     return plates.find(plate => plate.id === plateId);
   };
 
-  const getMealTotal = (selectedPlates: Record<string, number>) => {
-    let total = 0;
-    Object.entries(selectedPlates).forEach(([plateId, quantity]) => {
-      const plate = getPlateById(plateId);
-      if (plate) {
-        total += plate.basePrice * quantity;
-      }
-    });
-    return total;
+  const getMealTotal = (selectedPlates: DetailedPlateCustomization[]) => {
+    return selectedPlates.reduce((sum, plate) => {
+      return sum + (plate.customization.totalPrice * plate.quantity);
+    }, 0);
   };
 
   const getDayTotal = (day: DaySchedule) => {
     let total = 0;
     day.meals.forEach((meal: SelectedMeal) => {
-      if (meal.selectedPlates) {
-        total += getMealTotal(meal.selectedPlates);
+      if (meal.selectedPlates && Array.isArray(meal.selectedPlates)) {
+        total += getMealTotal(meal.selectedPlates as DetailedPlateCustomization[]);
       }
     });
     return total;
@@ -203,8 +258,11 @@ export default function SubscriptionConfirmationScreen() {
     let count = 0;
     selectedSchedule.forEach((day: DaySchedule) => {
       day.meals.forEach((meal: SelectedMeal) => {
-        if (meal.selectedPlates) {
-          count += Object.values(meal.selectedPlates).reduce((sum: number, quantity: number) => sum + quantity, 0);
+        if (meal.selectedPlates && Array.isArray(meal.selectedPlates)) {
+          count += (meal.selectedPlates as DetailedPlateCustomization[]).reduce(
+            (sum, plate) => sum + plate.quantity, 
+            0
+          );
         }
       });
     });
@@ -218,7 +276,14 @@ export default function SubscriptionConfirmationScreen() {
     }
 
     const { customerApi } = await import('@/services/api/customerApi');
-    const customerId = (await customerApi.getCustomerByUid(user?.uid || '')).data?.id || '';
+    const customerResult = await customerApi.getCustomerByUid(user?.uid || '');
+    
+    if (!customerResult.success || !customerResult.data) {
+      Alert.alert('Error', 'Customer information not found. Please complete your profile.');
+      return;
+    }
+    
+    const customerId = customerResult.data.id;
     const mockDeliveryAddress = getMockDeliveryAddress();
     const now = new Date();
     const startDate = now.toISOString();
@@ -294,7 +359,7 @@ export default function SubscriptionConfirmationScreen() {
 
   const renderDaySection = ({ item: day, index: dayIndex }: { item: DaySchedule, index: number }) => {
     const hasMealsWithItems = day.meals.some((meal: SelectedMeal) => 
-      meal.selectedPlates && Object.keys(meal.selectedPlates).length > 0
+      meal.selectedPlates && Array.isArray(meal.selectedPlates) && meal.selectedPlates.length > 0
     );
     
     if (!hasMealsWithItems) return null;
@@ -311,9 +376,11 @@ export default function SubscriptionConfirmationScreen() {
         </View>
         
         {day.meals.map((meal: SelectedMeal, mealIndex: number) => {
-          if (!meal.selectedPlates || Object.keys(meal.selectedPlates).length === 0) {
+          if (!meal.selectedPlates || !Array.isArray(meal.selectedPlates) || meal.selectedPlates.length === 0) {
             return null;
           }
+          
+          const detailedPlates = meal.selectedPlates as DetailedPlateCustomization[];
           
           return (
             <View key={`${day.day}-${meal.type}`} style={styles.mealSection}>
@@ -321,14 +388,14 @@ export default function SubscriptionConfirmationScreen() {
                 {formatMealName(meal.type)}
               </Text>
               
-              {Object.entries(meal.selectedPlates).map(([plateId, quantity]) => {
-                const plate = getPlateById(plateId);
+              {detailedPlates.map((detailedPlate: DetailedPlateCustomization) => {
+                const plate = getPlateById(detailedPlate.plateId);
                 if (!plate) return null;
                 
-                const itemTotal = plate.basePrice * quantity;
+                const itemTotal = detailedPlate.customization.totalPrice * detailedPlate.quantity;
                 
                 return (
-                  <View key={plateId} style={styles.orderItem}>
+                  <View key={`${detailedPlate.plateId}-${mealIndex}`} style={styles.orderItem}>
                     {plate.imageUrl ? (
                       <Image source={{ uri: plate.imageUrl }} style={styles.itemImage} />
                     ) : (
@@ -338,14 +405,37 @@ export default function SubscriptionConfirmationScreen() {
                     )}
                     
                     <View style={styles.itemDetails}>
-                      <Text style={styles.itemName}>{plate.name}</Text>
+                      <Text style={styles.itemName}>{detailedPlate.plateName || plate.name}</Text>
                       <Text style={styles.itemDescription} numberOfLines={2}>
                         {plate.description}
                       </Text>
                       
+                      {/* Show customization details */}
+                      {(detailedPlate.customization.selectedOptions.length > 0 || 
+                        detailedPlate.customization.removedIngredients.length > 0 ||
+                        detailedPlate.customization.notes) && (
+                        <View style={styles.customizationDetails}>
+                          {detailedPlate.customization.selectedOptions.length > 0 && (
+                            <Text style={styles.customizationText} numberOfLines={1}>
+                              Options: {detailedPlate.customization.selectedOptions.map(opt => opt.optionName).join(', ')}
+                            </Text>
+                          )}
+                          {detailedPlate.customization.removedIngredients.length > 0 && (
+                            <Text style={styles.customizationText} numberOfLines={1}>
+                              Removed: {detailedPlate.customization.removedIngredients.join(', ')}
+                            </Text>
+                          )}
+                          {detailedPlate.customization.notes && (
+                            <Text style={styles.customizationText} numberOfLines={1} ellipsizeMode="tail">
+                              Notes: {detailedPlate.customization.notes}
+                            </Text>
+                          )}
+                        </View>
+                      )}
+                      
                       <View style={styles.itemFooter}>
                         <View style={styles.quantityContainer}>
-                          <Text style={styles.quantityText}>{quantity}x</Text>
+                          <Text style={styles.quantityText}>{detailedPlate.quantity}x</Text>
                         </View>
                         
                         <Text style={styles.itemPrice}>
@@ -391,7 +481,7 @@ export default function SubscriptionConfirmationScreen() {
 
   const hasItems = selectedSchedule.some((day: DaySchedule) => 
     day.meals.some((meal: SelectedMeal) => 
-      meal.selectedPlates && Object.keys(meal.selectedPlates).length > 0
+      meal.selectedPlates && Array.isArray(meal.selectedPlates) && meal.selectedPlates.length > 0
     )
   );
 
@@ -642,6 +732,19 @@ const createStyles = (colors: any) => StyleSheet.create({
     color: colors.defaultColor,
     marginBottom: 8,
     lineHeight: 16,
+  },
+  customizationDetails: {
+    marginBottom: 8,
+    padding: 6,
+    backgroundColor: colors.secondaryBackground,
+    borderRadius: 6,
+    borderColor: colors.border,
+  },
+  customizationText: {
+    fontSize: 11,
+    color: colors.defaultColor,
+    fontStyle: 'italic',
+    marginBottom: 2,
   },
   itemFooter: {
     flexDirection: 'row',
